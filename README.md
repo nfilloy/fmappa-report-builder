@@ -9,6 +9,8 @@ Basic Next.js skeleton for the Footprint Mappa report builder challenge.
 - App Router
 - JavaScript / JSX
 - Tailwind CSS v4
+- shadcn/ui (`new-york` style)
+- Radix UI
 - Lucide icons
 
 ## How To Run
