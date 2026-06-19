@@ -251,6 +251,14 @@ function SectionBody({ section, report }) {
   return <TextReport content={section.content} />;
 }
 
+function sectionClassName(section) {
+  return [
+    "report-section",
+    `report-section--${section.id}`,
+    `report-section--${section.type}`,
+  ].join(" ");
+}
+
 export function HtmlReport({ report, sections, settings }) {
   const clientName = settings?.clientName || report.clientName;
   const reportLabel =
@@ -325,7 +333,7 @@ export function HtmlReport({ report, sections, settings }) {
       </nav>
 
       {visibleSections.map((section) => (
-        <section className="report-section" key={section.id}>
+        <section className={sectionClassName(section)} key={section.id}>
           <h2>{section.title}</h2>
           <SectionBody section={section} report={report} />
         </section>

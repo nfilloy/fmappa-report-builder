@@ -31,7 +31,7 @@ export async function POST(request) {
     const pdf = await page.pdf({
       format: "A4",
       displayHeaderFooter: true,
-      footerTemplate: renderPdfFooter(),
+      footerTemplate: renderPdfFooter({ settings }),
       headerTemplate: renderPdfHeader({ report, settings }),
       printBackground: true,
       margin: {

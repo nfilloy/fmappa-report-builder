@@ -34,7 +34,7 @@ import { SECTION_PRESETS } from "@/lib/report/sections";
 function TileInner({ section, isSelected, dragging, onToggleSection, onSelectSection, onRemoveSection }) {
   return (
     <div
-      className={`flex items-center gap-3 rounded-xl border p-3 transition-all ${
+      className={`flex min-w-0 items-center gap-3 rounded-xl border p-3 transition-all ${
         isSelected
           ? "border-primary bg-primary/5 shadow-[0_0_0_1px_var(--primary)]"
           : "border-border bg-card hover:border-primary/40 hover:bg-secondary/40"
@@ -48,7 +48,7 @@ function TileInner({ section, isSelected, dragging, onToggleSection, onSelectSec
         <GripVertical className="h-5 w-5" />
       </span>
       <label
-        className="flex flex-1 items-center gap-3 text-sm text-foreground"
+        className="flex min-w-0 flex-1 items-center gap-3 text-sm text-foreground"
         onPointerDown={(event) => event.stopPropagation()}
       >
         <input
@@ -62,8 +62,10 @@ function TileInner({ section, isSelected, dragging, onToggleSection, onSelectSec
           onClick={() => onSelectSection(section.id)}
           type="button"
         >
-          <span className="block truncate font-medium">{section.title}</span>
-          <span className="mt-1 block text-xs uppercase tracking-wide text-muted-foreground">
+          <span className="block truncate font-medium" title={section.title}>
+            {section.title}
+          </span>
+          <span className="mt-1 block truncate text-xs uppercase tracking-wide text-muted-foreground">
             {section.removable ? "custom · text" : section.type}
           </span>
         </button>
@@ -164,9 +166,9 @@ export function SectionControls({
   }
 
   return (
-    <Card>
-      <CardHeader className="flex-row items-start justify-between">
-        <div>
+    <Card className="min-w-0">
+      <CardHeader className="flex-row items-start justify-between gap-3">
+        <div className="min-w-0">
           <CardTitle>Template sections</CardTitle>
           <p className="mt-1 text-xs text-muted-foreground">
             {enabledCount} of {sections.length} included in PDF
@@ -182,12 +184,12 @@ export function SectionControls({
           <RotateCcw aria-hidden="true" />
         </Button>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
+      <CardContent className="min-w-0 space-y-4">
+        <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Templates
           </p>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-2 flex min-w-0 flex-wrap gap-2">
             {Object.entries(SECTION_PRESETS).map(([presetId, preset]) => (
               <Button
                 key={presetId}
@@ -255,8 +257,8 @@ export function SectionControls({
 
         {selectedSection ? (
           <div className="rounded-xl border border-border bg-secondary/40 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+              <h3 className="min-w-0 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 Edit section
               </h3>
               <Badge variant="outline">

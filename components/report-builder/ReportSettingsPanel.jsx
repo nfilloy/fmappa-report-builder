@@ -43,7 +43,7 @@ export function ReportSettingsPanel({ settings, onChange }) {
   }
 
   return (
-    <Card>
+    <Card className="min-w-0">
       <CardHeader>
         <CardTitle>Report branding</CardTitle>
       </CardHeader>
@@ -64,7 +64,7 @@ export function ReportSettingsPanel({ settings, onChange }) {
             value={settings.reportLabel}
           />
         </label>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm font-medium text-foreground">
             Report year
             <Input
@@ -108,12 +108,12 @@ export function ReportSettingsPanel({ settings, onChange }) {
           <p className="mt-1 text-xs text-muted-foreground">
             Optional logo embedded on the exported report cover.
           </p>
-          <div className="mt-3 flex items-center gap-3">
+          <div className="mt-3 flex min-w-0 flex-wrap items-center gap-3">
             {settings.logoDataUrl ? (
               // eslint-disable-next-line @next/next/no-img-element -- user-uploaded data URL preview
               <img
                 alt="Client logo preview"
-                className="h-10 w-auto max-w-[120px] rounded-md border border-border bg-white object-contain p-1"
+                className="h-10 w-auto max-w-[120px] shrink rounded-md border border-border bg-white object-contain p-1"
                 src={settings.logoDataUrl}
               />
             ) : null}

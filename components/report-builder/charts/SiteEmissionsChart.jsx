@@ -14,6 +14,11 @@ import {
 import { formatTonnes } from "@/lib/formatters";
 import { CHART_AXIS, CHART_GRID, SEQUENTIAL_COLORS } from "@/lib/report/chartTheme";
 
+function shortLabel(value) {
+  const label = String(value || "");
+  return label.length > 18 ? `${label.slice(0, 17)}...` : label;
+}
+
 function ChartTooltip({ active, payload }) {
   if (!active || !payload?.length) {
     return null;
@@ -23,8 +28,12 @@ function ChartTooltip({ active, payload }) {
 
   return (
     <div className="rounded-lg border border-[#e0e4eb] bg-white px-3 py-2 text-xs shadow-md">
-      <p className="font-medium text-foreground">{point.entity}</p>
-      <p className="text-muted-foreground">{formatTonnes(point.totalEmissions)}</p>
+      <p className="max-w-60 break-words font-medium text-foreground">
+        {point.entity}
+      </p>
+      <p className="text-muted-foreground tabular-nums">
+        {formatTonnes(point.totalEmissions)}
+      </p>
     </div>
   );
 }
@@ -35,12 +44,12 @@ export function SiteEmissionsChart({ sites }) {
   );
 
   return (
-    <div className="h-64 w-full">
+    <div className="h-64 min-w-0 w-full overflow-hidden">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           data={data}
           layout="vertical"
-          margin={{ top: 4, right: 16, bottom: 4, left: 8 }}
+            margin={{ top: 4, right: 12, bottom: 4, left: 0 }}
         >
           <CartesianGrid
             horizontal={false}
@@ -57,8 +66,9 @@ export function SiteEmissionsChart({ sites }) {
           <YAxis
             type="category"
             dataKey="entity"
-            width={120}
+            width={112}
             tick={{ fill: CHART_AXIS, fontSize: 12 }}
+            tickFormatter={shortLabel}
             axisLine={false}
             tickLine={false}
           />

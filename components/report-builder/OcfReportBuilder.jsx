@@ -7,6 +7,8 @@ import { AlertCircle, Download, Info, Leaf, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ProgressiveFluxLoader } from "@/components/ui/progressive-flux-loader";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { FileUpload } from "@/components/report-builder/FileUpload";
 import { KpiCards } from "@/components/report-builder/KpiCards";
 import { ReportSettingsPanel } from "@/components/report-builder/ReportSettingsPanel";
@@ -27,6 +29,13 @@ import {
   removeSection,
   updateSection,
 } from "@/lib/report/sections";
+
+const PDF_LOADER_PHASES = [
+  { at: 0, label: "preparing report" },
+  { at: 35, label: "rendering pages" },
+  { at: 70, label: "building pdf" },
+  { at: 92, label: "starting download" },
+];
 
 export function OcfReportBuilder() {
   const [report, setReport] = useState(null);
@@ -237,48 +246,80 @@ export function OcfReportBuilder() {
   }, [report]);
 
   return (
-    <main className="app-dune-bg min-h-screen text-foreground">
-      <section className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-8">
-        <div className="mappa-hero-gradient flex flex-col gap-6 px-1 py-8 sm:px-2 md:flex-row md:items-end md:justify-between">
-          <div className="max-w-xl">
+    <main className="app-dune-bg min-h-screen overflow-x-clip text-foreground">
+      <section className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-8">
+        <div className="mappa-hero-gradient flex min-w-0 flex-col gap-6 px-1 py-8 sm:px-2">
+          <div className="flex items-center justify-between gap-4">
             <Image
               src="/brand/logo-gradient.png"
               alt="Footprint Mappa"
               width={107}
               height={38}
               priority
-              className="h-9 w-auto"
+              className="h-9 max-w-full object-contain"
             />
-            <h1 className="mt-6 max-w-xl text-4xl font-bold leading-[1.02] tracking-tighter sm:text-6xl">
-              <span className="text-foreground">OCF </span>
-              <span className="mappa-text-gradient">Report Builder</span>
-            </h1>
-            <p className="mt-4 max-w-md text-base leading-7 text-muted-foreground">
-              Upload an organisational carbon footprint CSV to generate a live
-              report preview with charts, configurable sections and a polished
-              PDF export.
-            </p>
+            <ThemeToggle className="shrink-0" />
           </div>
-          {report ? (
-            <Button
-              disabled={pdfLoading}
-              onClick={handleDownloadPdf}
-              size="lg"
-              variant="gradient"
-              className="shrink-0"
-            >
-              {pdfLoading ? (
-                <Loader2 aria-hidden="true" className="animate-spin" />
-              ) : (
-                <Download aria-hidden="true" />
-              )}
-              {pdfLoading ? "Generating PDF" : "Download PDF"}
-            </Button>
-          ) : null}
+          <div className="flex min-w-0 flex-col gap-6 md:flex-row md:items-end md:justify-between">
+            <div className="min-w-0 max-w-xl">
+              <h1 className="max-w-xl text-[clamp(2.35rem,1.75rem+2vw,3.75rem)] font-bold leading-[1.02]">
+                <span className="text-foreground">OCF </span>
+                <span className="mappa-text-gradient">Report Builder</span>
+              </h1>
+              <p className="mt-4 max-w-md text-base leading-7 text-muted-foreground">
+                Upload an organisational carbon footprint CSV to generate a live
+                report preview with charts, configurable sections and a polished
+                PDF export.
+              </p>
+            </div>
+            {report ? (
+              <Button
+                disabled={pdfLoading}
+                onClick={handleDownloadPdf}
+                size="lg"
+                variant="gradient"
+                className="w-full shrink-0 md:w-auto"
+              >
+                {pdfLoading ? (
+                  <span className="h-4 w-16">
+                    <ProgressiveFluxLoader
+                      duration={3}
+                      showLabel={false}
+                      barClassName="h-4 bg-white/25"
+                      className="max-w-none gap-0"
+                    />
+                  </span>
+                ) : (
+                  <Download aria-hidden="true" />
+                )}
+                {pdfLoading ? "Generating PDF" : "Download PDF"}
+              </Button>
+            ) : null}
+          </div>
+          <AnimatePresence>
+            {pdfLoading ? (
+              <motion.div
+                key="pdf-loader"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+                className="rounded-2xl border border-border/70 bg-card/80 px-5 py-5 shadow-sm backdrop-blur"
+              >
+                <ProgressiveFluxLoader
+                  duration={10}
+                  phases={PDF_LOADER_PHASES}
+                  textClassName="text-base sm:text-lg"
+                  barClassName="h-3"
+                  className="max-w-lg gap-4 [--flux-from:#041282] [--flux-to:#74e1ff]"
+                />
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         </div>
 
-        <div className="grid gap-6 py-8 lg:grid-cols-[360px_1fr]">
-          <aside className="space-y-4">
+        <div className="grid min-w-0 gap-6 py-8 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
+          <aside className="min-w-0 space-y-4">
             <FileUpload
               onFileSelected={handleFileSelected}
               onLoadSample={handleLoadSample}
@@ -325,14 +366,14 @@ export function OcfReportBuilder() {
             {report ? (
               <motion.div
                 key="report"
-                className="space-y-6"
+                className="min-w-0 space-y-6"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.35, ease: "easeOut" }}
               >
                 <KpiCards kpis={kpis} />
-                <div className="grid gap-6 xl:grid-cols-2">
+                <div className="grid min-w-0 gap-6 xl:grid-cols-2">
                   <ScopeDonut
                     scopes={report.scopeBreakdown}
                     total={report.total.totalEmissions}
@@ -340,7 +381,7 @@ export function OcfReportBuilder() {
                   <TopCategories categories={report.topScope3Categories} />
                 </div>
                 <SiteEmissionsTable sites={report.sites} />
-                <Card className="overflow-hidden">
+                <Card className="min-w-0 overflow-hidden">
                   <CardHeader>
                     <CardTitle>HTML report preview</CardTitle>
                     <p className="text-sm text-muted-foreground">
@@ -348,7 +389,7 @@ export function OcfReportBuilder() {
                     </p>
                   </CardHeader>
                   <CardContent className="px-0 pb-0">
-                    <div className="max-h-[820px] overflow-auto bg-secondary p-4">
+                    <div className="max-h-[820px] overflow-auto bg-secondary p-3 sm:p-4">
                       <style>{HTML_REPORT_STYLES}</style>
                       <HtmlReport report={report} sections={sections} settings={settings} />
                     </div>

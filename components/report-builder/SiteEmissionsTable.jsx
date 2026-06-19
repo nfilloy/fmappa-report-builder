@@ -4,15 +4,17 @@ import { formatTonnes } from "@/lib/formatters";
 
 export function SiteEmissionsTable({ sites }) {
   return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between">
+    <Card className="min-w-0 overflow-hidden">
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
         <CardTitle>Site emissions</CardTitle>
-        <span className="text-sm text-muted-foreground">{sites.length} sites</span>
+        <span className="shrink-0 text-sm text-muted-foreground">
+          {sites.length} sites
+        </span>
       </CardHeader>
-      <CardContent className="space-y-5">
+      <CardContent className="min-w-0 space-y-5">
         <SiteEmissionsChart sites={sites} />
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[620px] border-collapse text-sm">
+        <div className="-mx-5 overflow-x-auto px-5">
+          <table className="w-full min-w-[560px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left text-muted-foreground">
                 <th className="py-3 pr-4 font-medium">Entity</th>
@@ -25,11 +27,13 @@ export function SiteEmissionsTable({ sites }) {
             <tbody>
               {sites.map((site) => (
                 <tr key={site.entity} className="border-b border-border/70 text-foreground/80">
-                  <td className="py-3 pr-4 font-medium text-foreground">{site.entity}</td>
-                  <td className="px-4 py-3 text-right">{formatTonnes(site.scope1)}</td>
-                  <td className="px-4 py-3 text-right">{formatTonnes(site.scope2)}</td>
-                  <td className="px-4 py-3 text-right">{formatTonnes(site.scope3)}</td>
-                  <td className="py-3 pl-4 text-right">{formatTonnes(site.totalEmissions)}</td>
+                  <td className="max-w-48 break-words py-3 pr-4 font-medium text-foreground">
+                    {site.entity}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums">{formatTonnes(site.scope1)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{formatTonnes(site.scope2)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{formatTonnes(site.scope3)}</td>
+                  <td className="py-3 pl-4 text-right tabular-nums">{formatTonnes(site.totalEmissions)}</td>
                 </tr>
               ))}
             </tbody>

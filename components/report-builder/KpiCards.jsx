@@ -40,34 +40,36 @@ const itemVariants = {
 export function KpiCards({ kpis }) {
   return (
     <motion.div
-      className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+      className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4"
       variants={containerVariants}
       initial="hidden"
       animate="visible"
     >
       {kpis.map((kpi) => (
-        <motion.div key={kpi.label} variants={itemVariants}>
-          <Card className="relative h-full overflow-hidden rounded-2xl">
+        <motion.div className="min-w-0" key={kpi.label} variants={itemVariants}>
+          <Card className="relative h-full min-w-0 overflow-hidden rounded-2xl">
             <span
               aria-hidden="true"
               className="absolute inset-x-0 top-0 h-1"
               style={{ backgroundColor: kpi.color }}
             />
-            <div className="px-5 py-6">
-              <div className="flex items-center gap-2">
+            <div className="min-w-0 px-5 py-6">
+              <div className="flex min-w-0 items-center gap-2">
                 <span
                   aria-hidden="true"
                   className="h-2.5 w-2.5 rounded-full"
                   style={{ backgroundColor: kpi.color }}
                 />
-                <p className="text-sm font-medium text-muted-foreground">
+                <p className="min-w-0 text-sm font-medium text-muted-foreground">
                   {kpi.label}
                 </p>
               </div>
-              <p className="mt-4 text-3xl font-bold tracking-tighter text-foreground">
+              <p className="mt-4 break-words text-[clamp(1.55rem,1.1rem+1vw,1.875rem)] font-bold leading-tight text-foreground tabular-nums">
                 <CountUp value={kpi.value} />
               </p>
-              <p className="mt-2 text-sm text-muted-foreground">{kpi.detail}</p>
+              <p className="mt-2 min-w-0 break-words text-sm text-muted-foreground">
+                {kpi.detail}
+              </p>
             </div>
           </Card>
         </motion.div>
