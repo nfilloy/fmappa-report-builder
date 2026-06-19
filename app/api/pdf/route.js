@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { chromium } from "playwright";
 
-import { renderHtmlReportDocument } from "@/lib/report/renderHtmlReport";
+import {
+  renderHtmlReportDocument,
+  renderPdfFooter,
+  renderPdfHeader,
+} from "@/lib/report/renderHtmlReport";
 
 export const runtime = "nodejs";
 
@@ -26,11 +30,14 @@ export async function POST(request) {
 
     const pdf = await page.pdf({
       format: "A4",
+      displayHeaderFooter: true,
+      footerTemplate: renderPdfFooter(),
+      headerTemplate: renderPdfHeader({ report, settings }),
       printBackground: true,
       margin: {
-        top: "16mm",
+        top: "24mm",
         right: "12mm",
-        bottom: "16mm",
+        bottom: "22mm",
         left: "12mm",
       },
     });

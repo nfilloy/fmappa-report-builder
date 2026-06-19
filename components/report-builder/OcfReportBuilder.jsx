@@ -1,38 +1,69 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FileText, Info, Loader2 } from "lucide-react";
+import Image from "next/image";
+import { AnimatePresence, motion } from "framer-motion";
+import { AlertCircle, Download, Info, Leaf, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileUpload } from "@/components/report-builder/FileUpload";
+import { KpiCards } from "@/components/report-builder/KpiCards";
 import { ReportSettingsPanel } from "@/components/report-builder/ReportSettingsPanel";
 import { SectionControls } from "@/components/report-builder/SectionControls";
-import { ScopeBreakdown } from "@/components/report-builder/ScopeBreakdown";
+import { ScopeDonut } from "@/components/report-builder/charts/ScopeDonut";
 import { SiteEmissionsTable } from "@/components/report-builder/SiteEmissionsTable";
 import { TopCategories } from "@/components/report-builder/TopCategories";
 import { HtmlReport } from "@/components/report-html/HtmlReport";
 import { buildOcfReport } from "@/lib/data/ocf";
 import { parseCsv } from "@/lib/data/parseCsv";
-import { formatPercent, formatTonnes } from "@/lib/formatters";
+import { formatPercent } from "@/lib/formatters";
+import { BRAND, SCOPE_COLORS } from "@/lib/report/chartTheme";
 import { HTML_REPORT_STYLES } from "@/lib/report/htmlReportStyles";
-import { buildReportSections, reorderSection } from "@/lib/report/sections";
+import {
+  applyPreset,
+  buildReportSections,
+  createCustomSection,
+  removeSection,
+  updateSection,
+} from "@/lib/report/sections";
 
 export function OcfReportBuilder() {
   const [report, setReport] = useState(null);
   const [sections, setSections] = useState([]);
+  const [selectedSectionId, setSelectedSectionId] = useState("");
   const [settings, setSettings] = useState({
     clientName: "RELATS S.A.U.",
-    reportLabel: "Configurable OCF report",
-    accentColor: "#0891b2",
+    reportLabel: "Organisational Carbon Footprint Report 2024",
+    accentColor: "#b91c1c",
+    reportYear: "2024",
+    preparedBy: "Footprint Mappa",
+    reportingPeriod: "",
+    notes: "",
+    logoDataUrl: "",
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
 
+  function ingestCsv(text, fileName) {
+    const rows = parseCsv(text);
+    const nextReport = buildOcfReport(rows, fileName);
+    const nextSections = buildReportSections(nextReport);
+    setReport(nextReport);
+    setSections(nextSections);
+    setSelectedSectionId(nextSections[0]?.id || "");
+    setSettings((currentSettings) => ({
+      ...currentSettings,
+      clientName: nextReport.clientName,
+    }));
+  }
+
   async function handleFileSelected(file) {
     setError("");
     setReport(null);
     setSections([]);
+    setSelectedSectionId("");
 
     if (!file) {
       return;
@@ -47,16 +78,32 @@ export function OcfReportBuilder() {
 
     try {
       const text = await file.text();
-      const rows = parseCsv(text);
-      const nextReport = buildOcfReport(rows, file.name);
-      setReport(nextReport);
-      setSections(buildReportSections(nextReport));
-      setSettings((currentSettings) => ({
-        ...currentSettings,
-        clientName: nextReport.clientName,
-      }));
+      ingestCsv(text, file.name);
     } catch (nextError) {
       setError(nextError.message || "The CSV could not be parsed.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleLoadSample() {
+    setError("");
+    setReport(null);
+    setSections([]);
+    setSelectedSectionId("");
+    setLoading(true);
+
+    try {
+      const response = await fetch("/sample_ocf_iso_14064.csv");
+
+      if (!response.ok) {
+        throw new Error("The sample CSV could not be loaded.");
+      }
+
+      const text = await response.text();
+      ingestCsv(text, "sample_ocf_iso_14064.csv");
+    } catch (nextError) {
+      setError(nextError.message || "The sample CSV could not be loaded.");
     } finally {
       setLoading(false);
     }
@@ -106,10 +153,51 @@ export function OcfReportBuilder() {
     );
   }
 
-  function handleMoveSection(sectionId, direction) {
+  function handleReorderSections(nextSections) {
+    setSections(nextSections);
+  }
+
+  function handleAddSection() {
+    setSections((currentSections) => {
+      const customCount = currentSections.filter(
+        (section) => section.removable,
+      ).length;
+      const newSection = createCustomSection(customCount);
+      setSelectedSectionId(newSection.id);
+      return [...currentSections, newSection];
+    });
+  }
+
+  function handleRemoveSection(sectionId) {
+    setSections((currentSections) => {
+      const nextSections = removeSection(currentSections, sectionId);
+      setSelectedSectionId((currentSelected) =>
+        currentSelected === sectionId
+          ? nextSections[0]?.id || ""
+          : currentSelected,
+      );
+      return nextSections;
+    });
+  }
+
+  function handleApplyPreset(presetId) {
+    setSections((currentSections) => applyPreset(currentSections, presetId));
+  }
+
+  function handleUpdateSection(sectionId, updates) {
     setSections((currentSections) =>
-      reorderSection(currentSections, sectionId, direction),
+      updateSection(currentSections, sectionId, updates),
     );
+  }
+
+  function handleRestoreSections() {
+    if (!report) {
+      return;
+    }
+
+    const restoredSections = buildReportSections(report);
+    setSections(restoredSections);
+    setSelectedSectionId(restoredSections[0]?.id || "");
   }
 
   const kpis = useMemo(() => {
@@ -118,32 +206,72 @@ export function OcfReportBuilder() {
     }
 
     return [
-      { label: "Total emissions", value: formatTonnes(report.total.totalEmissions), detail: report.totalSource === "official" ? "Official Total empresa row" : "Calculated from site rows" },
-      { label: "Scope 1", value: formatTonnes(report.total.scope1), detail: formatPercent(report.scopeBreakdown[0].percentage) },
-      { label: "Scope 2", value: formatTonnes(report.total.scope2), detail: formatPercent(report.scopeBreakdown[1].percentage) },
-      { label: "Scope 3", value: formatTonnes(report.total.scope3), detail: formatPercent(report.scopeBreakdown[2].percentage) },
+      {
+        label: "Total emissions",
+        value: report.total.totalEmissions,
+        detail:
+          report.totalSource === "official"
+            ? "Official Total empresa row"
+            : "Calculated from site rows",
+        color: BRAND.navy,
+      },
+      {
+        label: "Scope 1",
+        value: report.total.scope1,
+        detail: formatPercent(report.scopeBreakdown[0].percentage),
+        color: SCOPE_COLORS[0],
+      },
+      {
+        label: "Scope 2",
+        value: report.total.scope2,
+        detail: formatPercent(report.scopeBreakdown[1].percentage),
+        color: SCOPE_COLORS[1],
+      },
+      {
+        label: "Scope 3",
+        value: report.total.scope3,
+        detail: formatPercent(report.scopeBreakdown[2].percentage),
+        color: SCOPE_COLORS[2],
+      },
     ];
   }, [report]);
 
   return (
-    <main className="min-h-screen bg-neutral-950 text-foreground">
+    <main className="app-dune-bg min-h-screen text-foreground">
       <section className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-8">
-        <div className="flex flex-col gap-6 border-b border-neutral-800 pb-8 md:flex-row md:items-end md:justify-between">
-          <div>
-            <div className="flex items-center gap-3 text-sm font-medium uppercase text-cyan-300">
-              <FileText aria-hidden="true" className="h-5 w-5" />
-              Footprint Mappa
-            </div>
-            <h1 className="mt-5 text-3xl font-semibold leading-tight text-white sm:text-4xl">
-              OCF report builder
+        <div className="mappa-hero-gradient flex flex-col gap-6 px-1 py-8 sm:px-2 md:flex-row md:items-end md:justify-between">
+          <div className="max-w-xl">
+            <Image
+              src="/brand/logo-gradient.png"
+              alt="Footprint Mappa"
+              width={107}
+              height={38}
+              priority
+              className="h-9 w-auto"
+            />
+            <h1 className="mt-6 max-w-xl text-4xl font-bold leading-[1.02] tracking-tighter sm:text-6xl">
+              <span className="text-foreground">OCF </span>
+              <span className="mappa-text-gradient">Report Builder</span>
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-neutral-400">
-              Upload a compatible organisational carbon footprint CSV to generate a browser preview and a simple PDF report.
+            <p className="mt-4 max-w-md text-base leading-7 text-muted-foreground">
+              Upload an organisational carbon footprint CSV to generate a live
+              report preview with charts, configurable sections and a polished
+              PDF export.
             </p>
           </div>
           {report ? (
-            <Button disabled={pdfLoading} onClick={handleDownloadPdf}>
-              <FileText aria-hidden="true" />
+            <Button
+              disabled={pdfLoading}
+              onClick={handleDownloadPdf}
+              size="lg"
+              variant="gradient"
+              className="shrink-0"
+            >
+              {pdfLoading ? (
+                <Loader2 aria-hidden="true" className="animate-spin" />
+              ) : (
+                <Download aria-hidden="true" />
+              )}
               {pdfLoading ? "Generating PDF" : "Download PDF"}
             </Button>
           ) : null}
@@ -151,79 +279,106 @@ export function OcfReportBuilder() {
 
         <div className="grid gap-6 py-8 lg:grid-cols-[360px_1fr]">
           <aside className="space-y-4">
-            <FileUpload onFileSelected={handleFileSelected} fileName={report?.fileName} />
+            <FileUpload
+              onFileSelected={handleFileSelected}
+              onLoadSample={handleLoadSample}
+              fileName={report?.fileName}
+            />
             {loading ? (
-              <div className="flex items-center gap-3 rounded-lg border border-neutral-800 bg-neutral-950 p-4 text-sm text-neutral-300">
+              <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
                 <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
                 Parsing CSV
               </div>
             ) : null}
             {error ? (
-              <div className="rounded-lg border border-red-900 bg-red-950/40 p-4 text-sm leading-6 text-red-200">
+              <div className="flex gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm leading-6 text-destructive">
+                <AlertCircle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
                 {error}
               </div>
             ) : null}
             {report?.totalSource === "calculated" ? (
-              <div className="flex gap-3 rounded-lg border border-amber-900 bg-amber-950/30 p-4 text-sm leading-6 text-amber-100">
+              <div className="flex gap-3 rounded-xl border border-mappa-peach/40 bg-accent/60 p-4 text-sm leading-6 text-accent-foreground">
                 <Info aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
                 No Total empresa row was found. Totals are calculated from site rows.
               </div>
             ) : null}
             {report ? (
-              <ReportSettingsPanel
-                onChange={setSettings}
-                settings={settings}
-              />
+              <ReportSettingsPanel onChange={setSettings} settings={settings} />
             ) : null}
             {report ? (
               <SectionControls
-                onMoveSection={handleMoveSection}
+                onAddSection={handleAddSection}
+                onApplyPreset={handleApplyPreset}
+                onRemoveSection={handleRemoveSection}
+                onReorderSections={handleReorderSections}
+                onRestoreSections={handleRestoreSections}
+                onSelectSection={setSelectedSectionId}
                 onToggleSection={handleToggleSection}
+                onUpdateSection={handleUpdateSection}
                 sections={sections}
+                selectedSectionId={selectedSectionId}
               />
             ) : null}
           </aside>
 
-          {report ? (
-            <div className="space-y-6">
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                {kpis.map((kpi) => (
-                  <div key={kpi.label} className="rounded-lg border border-neutral-800 bg-neutral-950 p-5">
-                    <p className="text-sm text-neutral-400">{kpi.label}</p>
-                    <p className="mt-3 text-2xl font-semibold text-white">{kpi.value}</p>
-                    <p className="mt-2 text-sm text-cyan-200">{kpi.detail}</p>
-                  </div>
-                ))}
-              </div>
-              <ScopeBreakdown scopes={report.scopeBreakdown} />
-              <SiteEmissionsTable sites={report.sites} />
-              <TopCategories categories={report.topScope3Categories} />
-              <section className="overflow-hidden rounded-lg border border-neutral-800 bg-neutral-950">
-                <div className="border-b border-neutral-800 px-5 py-4">
-                  <h2 className="text-lg font-semibold text-white">
-                    HTML report preview
+          <AnimatePresence mode="wait">
+            {report ? (
+              <motion.div
+                key="report"
+                className="space-y-6"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.35, ease: "easeOut" }}
+              >
+                <KpiCards kpis={kpis} />
+                <div className="grid gap-6 xl:grid-cols-2">
+                  <ScopeDonut
+                    scopes={report.scopeBreakdown}
+                    total={report.total.totalEmissions}
+                  />
+                  <TopCategories categories={report.topScope3Categories} />
+                </div>
+                <SiteEmissionsTable sites={report.sites} />
+                <Card className="overflow-hidden">
+                  <CardHeader>
+                    <CardTitle>HTML report preview</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      This preview is the source of truth for the Playwright PDF export.
+                    </p>
+                  </CardHeader>
+                  <CardContent className="px-0 pb-0">
+                    <div className="max-h-[820px] overflow-auto bg-secondary p-4">
+                      <style>{HTML_REPORT_STYLES}</style>
+                      <HtmlReport report={report} sections={sections} settings={settings} />
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="empty"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="flex min-h-[420px] items-center justify-center rounded-2xl border border-dashed border-border bg-secondary/30 p-8 text-center"
+              >
+                <div>
+                  <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <Leaf aria-hidden="true" className="h-7 w-7" />
+                  </span>
+                  <h2 className="mt-5 text-xl font-semibold text-foreground">
+                    No report loaded
                   </h2>
-                  <p className="mt-1 text-sm text-neutral-400">
-                    This preview is the source of truth for the Playwright PDF export.
+                  <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground">
+                    Select a CSV with the required OCF columns to preview totals,
+                    scope breakdowns, site emissions and Scope 3 hotspots.
                   </p>
                 </div>
-                <div className="max-h-[820px] overflow-auto bg-neutral-200 p-4">
-                  <style>{HTML_REPORT_STYLES}</style>
-                  <HtmlReport report={report} sections={sections} settings={settings} />
-                </div>
-              </section>
-            </div>
-          ) : (
-            <div className="flex min-h-[420px] items-center justify-center rounded-lg border border-neutral-800 bg-neutral-950 p-8 text-center">
-              <div>
-                <FileText aria-hidden="true" className="mx-auto h-10 w-10 text-neutral-500" />
-                <h2 className="mt-4 text-xl font-semibold text-white">No report loaded</h2>
-                <p className="mt-3 max-w-md text-sm leading-6 text-neutral-400">
-                  Select a CSV with the required OCF columns to preview totals, scope breakdowns, site emissions and Scope 3 hotspots.
-                </p>
-              </div>
-            </div>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </section>
     </main>

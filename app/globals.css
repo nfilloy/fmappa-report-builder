@@ -3,39 +3,59 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+  Design tokens cloned from footprintmappa.com.
+  Light, spacious, navy + peach/coral brand identity.
+*/
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.625rem; /* 10px, matches Mappa */
+
+  --background: #ffffff;
+  --foreground: #14161f;
+  --card: #ffffff;
+  --card-foreground: #14161f;
+  --popover: #ffffff;
+  --popover-foreground: #14161f;
+
+  --primary: #041282; /* Mappa navy */
+  --primary-foreground: #ffffff;
+
+  --secondary: #f4f5f8;
+  --secondary-foreground: #14161f;
+  --muted: #f4f5f8;
+  --muted-foreground: #5c5f70;
+
+  --accent: #fff2e6; /* peach tint */
+  --accent-foreground: #8a4b12;
+
+  --destructive: #e23744;
+
+  --border: #e0e4eb;
+  --input: #e0e4eb;
+  --ring: #8a93d6;
+
+  /* Brand palette */
+  --mappa-navy: #041282;
+  --mappa-peach: #fca65e;
+  --mappa-coral: #ff7983;
+  --mappa-pink: #fdc2d8;
+  --mappa-teal: #4b4fd6; /* brand-derived periwinkle (5th accent) */
+
+  /* Chart palette shares the brand colours */
+  --chart-1: #041282;
+  --chart-2: #fca65e;
+  --chart-3: #ff7983;
+  --chart-4: #fdc2d8;
+  --chart-5: #4b4fd6;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #14161f;
+  --sidebar-primary: #041282;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f4f5f8;
+  --sidebar-accent-foreground: #14161f;
+  --sidebar-border: #e0e4eb;
+  --sidebar-ring: #8a93d6;
 }
 
 .dark {
@@ -77,6 +97,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -95,6 +116,11 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-mappa-navy: var(--mappa-navy);
+  --color-mappa-peach: var(--mappa-peach);
+  --color-mappa-coral: var(--mappa-coral);
+  --color-mappa-pink: var(--mappa-pink);
+  --color-mappa-teal: var(--mappa-teal);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -122,6 +148,51 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: Arial, Helvetica, sans-serif;
+    font-family: var(--font-grotesk), ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Headings tuned for BDO Grotesk */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+  }
+
+  /* Page backdrop — official Footprint Mappa dune gradient across the whole
+     site. Full-width image at the top fading into a clean light surface so
+     all content below stays readable. */
+  .app-dune-bg {
+    background-color: #f4f5f8;
+    background-image:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.50) 0%, rgba(255, 255, 255, 0.80) 26%, rgba(255, 255, 255, 0.93) 46%, #f4f5f8 64%),
+      url("/brand/hero-bg.jpg");
+    background-size: cover, 100% auto;
+    background-position: top center, top center;
+    background-repeat: no-repeat, no-repeat;
+  }
+
+  /* Transparent hero band — sits directly over the page dune backdrop. */
+  .mappa-hero-gradient {
+    background: transparent;
+  }
+
+  /* TIPO 1 — warm brand gradient (pink → orange → coral) */
+  .mappa-gradient-1 {
+    background-image: linear-gradient(120deg, #fdc2d8 0%, #fca65e 52%, #ff7983 100%);
+  }
+
+  /* TIPO 2 — cool→warm brand gradient with deep blue */
+  .mappa-gradient-2 {
+    background-image: linear-gradient(120deg, #041282 0%, #ff7983 62%, #fca65e 100%);
+  }
+
+  /* Gradient text for modern display headings */
+  .mappa-text-gradient {
+    background-image: linear-gradient(100deg, #041282 0%, #ff7983 55%, #fca65e 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
   }
 }

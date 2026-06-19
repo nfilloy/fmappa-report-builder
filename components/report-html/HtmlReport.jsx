@@ -1,4 +1,5 @@
 import { formatPercent, formatTonnes } from "@/lib/formatters";
+import { maxByValue, percentageOfMax } from "@/lib/report/chartData";
 import { enabledSections } from "@/lib/report/sections";
 
 function paragraphs(content) {
@@ -50,29 +51,80 @@ function ScopeBreakdownReport({ report }) {
 }
 
 function SiteEmissionsReport({ report }) {
+  const maxEmissions = maxByValue(report.sites, "totalEmissions");
+
   return (
-    <table className="report-table">
-      <thead>
-        <tr>
-          <th>Entity</th>
-          <th className="number">Scope 1</th>
-          <th className="number">Scope 2</th>
-          <th className="number">Scope 3</th>
-          <th className="number">Total</th>
-        </tr>
-      </thead>
-      <tbody>
+    <>
+      <div className="bar-list">
         {report.sites.map((site) => (
-          <tr key={site.entity}>
-            <td>{site.entity}</td>
-            <td className="number">{formatTonnes(site.scope1)}</td>
-            <td className="number">{formatTonnes(site.scope2)}</td>
-            <td className="number">{formatTonnes(site.scope3)}</td>
-            <td className="number">{formatTonnes(site.totalEmissions)}</td>
-          </tr>
+          <div className="bar-row" key={site.entity}>
+            <div className="bar-row-header">
+              <strong>{site.entity}</strong>
+              <span>{formatTonnes(site.totalEmissions)}</span>
+            </div>
+            <div className="bar-track">
+              <div
+                className="bar-fill site-fill"
+                style={{
+                  width: `${percentageOfMax(site.totalEmissions, maxEmissions)}%`,
+                }}
+              />
+            </div>
+          </div>
         ))}
-      </tbody>
-    </table>
+      </div>
+      <table className="report-table">
+        <thead>
+          <tr>
+            <th>Entity</th>
+            <th className="number">Scope 1</th>
+            <th className="number">Scope 2</th>
+            <th className="number">Scope 3</th>
+            <th className="number">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {report.sites.map((site) => (
+            <tr key={site.entity}>
+              <td>{site.entity}</td>
+              <td className="number">{formatTonnes(site.scope1)}</td>
+              <td className="number">{formatTonnes(site.scope2)}</td>
+              <td className="number">{formatTonnes(site.scope3)}</td>
+              <td className="number">{formatTonnes(site.totalEmissions)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+}
+
+function TopScope3Report({ report }) {
+  const maxCategoryValue = maxByValue(report.topScope3Categories, "value");
+
+  if (report.topScope3Categories.length === 0) {
+    return <p>No recognised Scope 3 category values were available.</p>;
+  }
+
+  return (
+    <div className="bar-list">
+      {report.topScope3Categories.map((category) => (
+        <div className="bar-row" key={category.key}>
+          <div className="bar-row-header">
+            <strong>{category.label}</strong>
+            <span>{formatTonnes(category.value)}</span>
+          </div>
+          <div className="bar-track">
+            <div
+              className="bar-fill category-fill"
+              style={{
+                width: `${percentageOfMax(category.value, maxCategoryValue)}%`,
+              }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -80,8 +132,8 @@ function CategoryTablesReport({ report }) {
   return (
     <div>
       {report.categoryBreakdown.map((group) => (
-        <div className="report-section" key={group.scope}>
-          <h2>{group.scope} detailed categories</h2>
+        <div className="category-group" key={group.scope}>
+          <h3>{group.scope} detailed categories</h3>
           <table className="report-table">
             <thead>
               <tr>
@@ -114,6 +166,22 @@ function CategoryTablesReport({ report }) {
   );
 }
 
+function SectionIntro({ content }) {
+  const items = paragraphs(content);
+
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="section-intro">
+      {items.map((paragraph) => (
+        <p key={paragraph}>{paragraph}</p>
+      ))}
+    </div>
+  );
+}
+
 function InsightsReport({ content }) {
   return (
     <ul className="insight-list">
@@ -136,23 +204,48 @@ function TextReport({ content }) {
 
 function SectionBody({ section, report }) {
   if (section.type === "metrics") {
-    return <GlobalResults report={report} />;
+    return (
+      <>
+        <SectionIntro content={section.content} />
+        <GlobalResults report={report} />
+      </>
+    );
   }
 
   if (section.type === "chart") {
-    return <ScopeBreakdownReport report={report} />;
+    return (
+      <>
+        <SectionIntro content={section.content} />
+        <ScopeBreakdownReport report={report} />
+      </>
+    );
   }
 
   if (section.type === "table") {
-    return <SiteEmissionsReport report={report} />;
+    return (
+      <>
+        <SectionIntro content={section.content} />
+        <SiteEmissionsReport report={report} />
+      </>
+    );
   }
 
   if (section.type === "category-tables") {
-    return <CategoryTablesReport report={report} />;
+    return (
+      <>
+        <SectionIntro content={section.content} />
+        <CategoryTablesReport report={report} />
+      </>
+    );
   }
 
   if (section.type === "insights") {
-    return <InsightsReport content={section.content} />;
+    return (
+      <>
+        <InsightsReport content={section.content} />
+        <TopScope3Report report={report} />
+      </>
+    );
   }
 
   return <TextReport content={section.content} />;
@@ -160,8 +253,19 @@ function SectionBody({ section, report }) {
 
 export function HtmlReport({ report, sections, settings }) {
   const clientName = settings?.clientName || report.clientName;
-  const reportLabel = settings?.reportLabel || "Configurable OCF report";
-  const accentColor = settings?.accentColor || "#0891b2";
+  const reportLabel =
+    settings?.reportLabel || "Organisational Carbon Footprint Report 2024";
+  const accentColor = settings?.accentColor || "#b91c1c";
+  const reportYear = settings?.reportYear || "2024";
+  const preparedBy = settings?.preparedBy || "Footprint Mappa";
+  const reportingPeriod = settings?.reportingPeriod || "";
+  const notes = settings?.notes || "";
+  const logoDataUrl = settings?.logoDataUrl || "";
+  const visibleSections = enabledSections(sections);
+  const totalSource =
+    report.totalSource === "official"
+      ? "Official Total empresa row"
+      : "Calculated from site rows";
 
   return (
     <article
@@ -169,21 +273,58 @@ export function HtmlReport({ report, sections, settings }) {
       style={{ "--report-accent": accentColor }}
     >
       <header className="report-cover">
-        <div className="report-eyebrow">Footprint Mappa · {reportLabel}</div>
-        <h1 className="report-title">{report.reportTitle}</h1>
-        <div className="report-meta">
-          <div>Client: {clientName}</div>
-          <div>Source file: {report.fileName}</div>
+        <div className="cover-topline">
+          {logoDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- data URL embedded in HTML/PDF report
+            <img className="cover-logo" src={logoDataUrl} alt={`${clientName} logo`} />
+          ) : (
+            <div className="client-wordmark">{clientName}</div>
+          )}
+          <div className="report-badge">OCF {reportYear}</div>
+        </div>
+        <div className="cover-main">
+          <p className="report-eyebrow">Prepared by {preparedBy}</p>
+          <h1 className="report-title">{reportLabel}</h1>
+          <p className="report-subtitle">
+            Configurable Scope 1, Scope 2 and Scope 3 emissions report generated from the uploaded OCF dataset.
+          </p>
+        </div>
+        <div className="cover-summary">
           <div>
-            Total source:{" "}
-            {report.totalSource === "official"
-              ? "Official Total empresa row"
-              : "Calculated from site rows"}
+            <span>Client</span>
+            <strong>{clientName}</strong>
+          </div>
+          <div>
+            <span>Total emissions</span>
+            <strong>{formatTonnes(report.total.totalEmissions)}</strong>
+          </div>
+          <div>
+            <span>{reportingPeriod ? "Reporting period" : "Source file"}</span>
+            <strong>{reportingPeriod || report.fileName}</strong>
+          </div>
+          <div>
+            <span>Total source</span>
+            <strong>{totalSource}</strong>
           </div>
         </div>
+        {notes ? (
+          <div className="cover-note">
+            <span>Assumptions &amp; notes</span>
+            <p>{notes}</p>
+          </div>
+        ) : null}
       </header>
 
-      {enabledSections(sections).map((section) => (
+      <nav className="report-toc" aria-label="Report sections">
+        <h2>Included sections</h2>
+        <ol>
+          {visibleSections.map((section) => (
+            <li key={section.id}>{section.title}</li>
+          ))}
+        </ol>
+      </nav>
+
+      {visibleSections.map((section) => (
         <section className="report-section" key={section.id}>
           <h2>{section.title}</h2>
           <SectionBody section={section} report={report} />
