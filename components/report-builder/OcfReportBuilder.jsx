@@ -2,26 +2,37 @@
 
 import { useMemo, useState } from "react";
 import { FileText, Info, Loader2 } from "lucide-react";
-import { pdf } from "@react-pdf/renderer";
 
 import { Button } from "@/components/ui/button";
-import { OcfReportDocument } from "@/components/report-pdf/OcfReportDocument";
 import { FileUpload } from "@/components/report-builder/FileUpload";
+import { ReportSettingsPanel } from "@/components/report-builder/ReportSettingsPanel";
+import { SectionControls } from "@/components/report-builder/SectionControls";
 import { ScopeBreakdown } from "@/components/report-builder/ScopeBreakdown";
 import { SiteEmissionsTable } from "@/components/report-builder/SiteEmissionsTable";
 import { TopCategories } from "@/components/report-builder/TopCategories";
+import { HtmlReport } from "@/components/report-html/HtmlReport";
 import { buildOcfReport } from "@/lib/data/ocf";
 import { parseCsv } from "@/lib/data/parseCsv";
 import { formatPercent, formatTonnes } from "@/lib/formatters";
+import { HTML_REPORT_STYLES } from "@/lib/report/htmlReportStyles";
+import { buildReportSections, reorderSection } from "@/lib/report/sections";
 
 export function OcfReportBuilder() {
   const [report, setReport] = useState(null);
+  const [sections, setSections] = useState([]);
+  const [settings, setSettings] = useState({
+    clientName: "RELATS S.A.U.",
+    reportLabel: "Configurable OCF report",
+    accentColor: "#0891b2",
+  });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   async function handleFileSelected(file) {
     setError("");
     setReport(null);
+    setSections([]);
 
     if (!file) {
       return;
@@ -37,7 +48,13 @@ export function OcfReportBuilder() {
     try {
       const text = await file.text();
       const rows = parseCsv(text);
-      setReport(buildOcfReport(rows, file.name));
+      const nextReport = buildOcfReport(rows, file.name);
+      setReport(nextReport);
+      setSections(buildReportSections(nextReport));
+      setSettings((currentSettings) => ({
+        ...currentSettings,
+        clientName: nextReport.clientName,
+      }));
     } catch (nextError) {
       setError(nextError.message || "The CSV could not be parsed.");
     } finally {
@@ -50,13 +67,49 @@ export function OcfReportBuilder() {
       return;
     }
 
-    const blob = await pdf(<OcfReportDocument report={report} />).toBlob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "ocf-report-2024.pdf";
-    link.click();
-    URL.revokeObjectURL(url);
+    setError("");
+    setPdfLoading(true);
+
+    try {
+      const response = await fetch("/api/pdf", {
+        body: JSON.stringify({ report, sections, settings }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || "The PDF could not be generated.");
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "ocf-report-2024.pdf";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (nextError) {
+      setError(nextError.message || "The PDF could not be generated.");
+    } finally {
+      setPdfLoading(false);
+    }
+  }
+
+  function handleToggleSection(sectionId) {
+    setSections((currentSections) =>
+      currentSections.map((section) =>
+        section.id === sectionId
+          ? { ...section, enabled: !section.enabled }
+          : section,
+      ),
+    );
+  }
+
+  function handleMoveSection(sectionId, direction) {
+    setSections((currentSections) =>
+      reorderSection(currentSections, sectionId, direction),
+    );
   }
 
   const kpis = useMemo(() => {
@@ -89,9 +142,9 @@ export function OcfReportBuilder() {
             </p>
           </div>
           {report ? (
-            <Button onClick={handleDownloadPdf}>
+            <Button disabled={pdfLoading} onClick={handleDownloadPdf}>
               <FileText aria-hidden="true" />
-              Download PDF
+              {pdfLoading ? "Generating PDF" : "Download PDF"}
             </Button>
           ) : null}
         </div>
@@ -116,6 +169,19 @@ export function OcfReportBuilder() {
                 No Total empresa row was found. Totals are calculated from site rows.
               </div>
             ) : null}
+            {report ? (
+              <ReportSettingsPanel
+                onChange={setSettings}
+                settings={settings}
+              />
+            ) : null}
+            {report ? (
+              <SectionControls
+                onMoveSection={handleMoveSection}
+                onToggleSection={handleToggleSection}
+                sections={sections}
+              />
+            ) : null}
           </aside>
 
           {report ? (
@@ -132,6 +198,20 @@ export function OcfReportBuilder() {
               <ScopeBreakdown scopes={report.scopeBreakdown} />
               <SiteEmissionsTable sites={report.sites} />
               <TopCategories categories={report.topScope3Categories} />
+              <section className="overflow-hidden rounded-lg border border-neutral-800 bg-neutral-950">
+                <div className="border-b border-neutral-800 px-5 py-4">
+                  <h2 className="text-lg font-semibold text-white">
+                    HTML report preview
+                  </h2>
+                  <p className="mt-1 text-sm text-neutral-400">
+                    This preview is the source of truth for the Playwright PDF export.
+                  </p>
+                </div>
+                <div className="max-h-[820px] overflow-auto bg-neutral-200 p-4">
+                  <style>{HTML_REPORT_STYLES}</style>
+                  <HtmlReport report={report} sections={sections} settings={settings} />
+                </div>
+              </section>
             </div>
           ) : (
             <div className="flex min-h-[420px] items-center justify-center rounded-lg border border-neutral-800 bg-neutral-950 p-8 text-center">

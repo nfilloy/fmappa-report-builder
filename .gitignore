@@ -11,3 +11,4 @@ pnpm-debug.log*
 .vercel
 *.tsbuildinfo
 ESPECIFICACION_RETO_TECNICO*.md
+documentacion/
