@@ -1,19 +1,32 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertCircle, Download, Info, Leaf, Loader2 } from "lucide-react";
+import {
+  AlertCircle,
+  Download,
+  Info,
+  Leaf,
+  Loader2,
+  Maximize2,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProgressiveFluxLoader } from "@/components/ui/progressive-flux-loader";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { Tabs } from "@/components/ui/tabs";
 import { Typewriter } from "@/components/ui/typewriter-text";
 import { FileUpload } from "@/components/report-builder/FileUpload";
 import { KpiCards } from "@/components/report-builder/KpiCards";
 import { ReportSettingsPanel } from "@/components/report-builder/ReportSettingsPanel";
-import { SectionControls } from "@/components/report-builder/SectionControls";
+import {
+  SectionEditor,
+  SectionList,
+} from "@/components/report-builder/SectionControls";
 import { ScopeDonut } from "@/components/report-builder/charts/ScopeDonut";
 import { SiteEmissionsTable } from "@/components/report-builder/SiteEmissionsTable";
 import { TopCategories } from "@/components/report-builder/TopCategories";
@@ -23,8 +36,11 @@ import { parseCsv } from "@/lib/data/parseCsv";
 import { formatPercent } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import { BRAND } from "@/lib/report/chartTheme";
-import { themeReport } from "@/lib/report/palette";
-import { HTML_REPORT_STYLES } from "@/lib/report/htmlReportStyles";
+import { buildBrandTheme } from "@/lib/report/brandTheme";
+import {
+  HTML_REPORT_PREVIEW_STYLES,
+  HTML_REPORT_STYLES,
+} from "@/lib/report/htmlReportStyles";
 import {
   applyPreset,
   buildReportSections,
@@ -46,7 +62,15 @@ const SAMPLE_FILES = {
   pcf: "/sample_pcf_iso_14067.csv",
 };
 
-function buildKpis(report, palette) {
+const VIEW_TABS = [
+  { label: "Document", value: "document" },
+  { label: "Summary", value: "summary" },
+];
+
+const A4_PAGE_WIDTH_PX = 794;
+const A4_PAGE_HEIGHT_PX = 1123;
+
+function buildKpis(report, accent) {
   if (!report) {
     return [];
   }
@@ -61,7 +85,7 @@ function buildKpis(report, palette) {
       label: "Total emissions",
       value: report.total.totalEmissions,
       detail: report.totalSourceLabel,
-      color: palette?.[0] || BRAND.navy,
+      color: accent || BRAND.navy,
     },
     ...breakdownForKpis.map((item) => ({
       label: item.label,
@@ -79,7 +103,8 @@ export function ReportBuilder() {
   const [settings, setSettings] = useState({
     clientName: "RELATS S.A.U.",
     reportLabel: "Organisational Carbon Footprint Report 2024",
-    accentColor: "#b91c1c",
+    accentColor: BRAND.navy,
+    accentSource: "mappa",
     reportYear: "2024",
     preparedBy: "Footprint Mappa",
     preparedFor: "",
@@ -93,6 +118,15 @@ export function ReportBuilder() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [view, setView] = useState("document");
+  const [previewWidth, setPreviewWidth] = useState(0);
+  const [pageCount, setPageCount] = useState(1);
+  // The scrollable preview viewport, stored in state via a callback ref so the
+  // scroll-spy effect re-runs once the element actually mounts: it lives behind an
+  // AnimatePresence transition and is not present on the first commit, so a plain
+  // ref would still be null when the effect first runs.
+  const [previewEl, setPreviewEl] = useState(null);
 
   const ingestCsv = useCallback((text, fileName) => {
     const rows = parseCsv(text);
@@ -101,6 +135,7 @@ export function ReportBuilder() {
     setReport(nextReport);
     setSections(nextSections);
     setSelectedSectionId(nextSections[0]?.id || "");
+    setView("document");
     setSettings((currentSettings) => ({
       ...currentSettings,
       clientName: nextReport.clientName,
@@ -113,6 +148,7 @@ export function ReportBuilder() {
     setReport(null);
     setSections([]);
     setSelectedSectionId("");
+    setView("document");
   }, []);
 
   const handleFileSelected = useCallback(async (file) => {
@@ -165,13 +201,10 @@ export function ReportBuilder() {
   const handleLoadSampleOcf = useCallback(() => handleLoadSample("ocf"), [handleLoadSample]);
   const handleLoadSamplePcf = useCallback(() => handleLoadSample("pcf"), [handleLoadSample]);
 
-  const themedReport = useMemo(
-    () => themeReport(report, settings.palette),
-    [report, settings.palette],
-  );
+  const brand = useMemo(() => buildBrandTheme(settings), [settings]);
   const kpis = useMemo(
-    () => buildKpis(themedReport, settings.palette),
-    [themedReport, settings.palette],
+    () => buildKpis(report, brand.accent),
+    [report, brand.accent],
   );
 
   const handleDownloadPdf = useCallback(async () => {
@@ -184,7 +217,7 @@ export function ReportBuilder() {
 
     try {
       const response = await fetch("/api/pdf", {
-        body: JSON.stringify({ report: themedReport, sections, settings }),
+        body: JSON.stringify({ report, sections, settings }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
@@ -206,7 +239,7 @@ export function ReportBuilder() {
     } finally {
       setPdfLoading(false);
     }
-  }, [report, sections, settings, themedReport]);
+  }, [report, sections, settings]);
 
   const handleToggleSection = useCallback((sectionId) => {
     setSections((currentSections) =>
@@ -229,6 +262,7 @@ export function ReportBuilder() {
       ).length;
       const newSection = createCustomSection(customCount);
       setSelectedSectionId(newSection.id);
+      setView("document");
       return [...currentSections, newSection];
     });
   }, []);
@@ -266,6 +300,137 @@ export function ReportBuilder() {
     setSections(restoredSections);
     setSelectedSectionId(restoredSections[0]?.id || "");
   }, [report]);
+
+  const scrollPreviewToSection = useCallback(
+    (sectionId) => {
+      if (!previewEl) {
+        return;
+      }
+
+      const target = previewEl.querySelector(`[data-section-id="${sectionId}"]`);
+      if (!target) {
+        return;
+      }
+
+      const top =
+        target.getBoundingClientRect().top -
+        previewEl.getBoundingClientRect().top +
+        previewEl.scrollTop -
+        12;
+      previewEl.scrollTo({ top, behavior: "smooth" });
+    },
+    [previewEl],
+  );
+
+  const handleSelectSection = useCallback(
+    (sectionId) => {
+      setSelectedSectionId(sectionId);
+      setView("document");
+      scrollPreviewToSection(sectionId);
+    },
+    [scrollPreviewToSection],
+  );
+
+  const handlePreviewSectionSelect = useCallback((sectionId) => {
+    setSelectedSectionId(sectionId);
+  }, []);
+
+  const zoomOut = useCallback(
+    () => setZoom((value) => Math.max(0.5, Math.round((value - 0.1) * 10) / 10)),
+    [],
+  );
+  const zoomIn = useCallback(
+    () => setZoom((value) => Math.min(1.5, Math.round((value + 0.1) * 10) / 10)),
+    [],
+  );
+  const zoomReset = useCallback(() => setZoom(1), []);
+
+  // Scroll-spy: highlight the section currently at the top of the preview so the
+  // controls list stays in sync as the user scrolls the report.
+  useEffect(() => {
+    const container = previewEl;
+    if (!container) {
+      return undefined;
+    }
+
+    let frame = 0;
+    const handleScroll = () => {
+      if (frame) {
+        return;
+      }
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const containerTop = container.getBoundingClientRect().top;
+        let current = "";
+        container.querySelectorAll("[data-section-id]").forEach((element) => {
+          if (element.getBoundingClientRect().top - containerTop <= 90) {
+            current = element.getAttribute("data-section-id");
+          }
+        });
+        if (current) {
+          setSelectedSectionId((previous) =>
+            previous === current ? previous : current,
+          );
+        }
+      });
+    };
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      if (frame) {
+        cancelAnimationFrame(frame);
+      }
+    };
+  }, [previewEl]);
+
+  useEffect(() => {
+    const container = previewEl;
+    if (!container) {
+      return undefined;
+    }
+
+    const updatePreviewMetrics = () => {
+      setPreviewWidth(container.clientWidth);
+
+      const page = container.querySelector(".report-page");
+      if (page) {
+        setPageCount(
+          Math.max(1, Math.ceil(page.scrollHeight / A4_PAGE_HEIGHT_PX)),
+        );
+      }
+    };
+
+    updatePreviewMetrics();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updatePreviewMetrics);
+      return () => window.removeEventListener("resize", updatePreviewMetrics);
+    }
+
+    const observer = new ResizeObserver(updatePreviewMetrics);
+    observer.observe(container);
+
+    const page = container.querySelector(".report-page");
+    if (page) {
+      observer.observe(page);
+    }
+
+    return () => observer.disconnect();
+  }, [previewEl, report, sections, settings, view]);
+
+  const effectiveZoom = useMemo(() => {
+    if (!previewWidth) {
+      return zoom;
+    }
+
+    const fitScale = (previewWidth - 32) / A4_PAGE_WIDTH_PX;
+    if (fitScale <= 0 || fitScale >= 1) {
+      return zoom;
+    }
+
+    return Math.min(zoom, Math.max(0.32, fitScale));
+  }, [previewWidth, zoom]);
 
   const tableTitle = report?.kind === "pcf" ? "Product emissions" : "Site emissions";
   const calculatedNotice =
@@ -326,29 +491,6 @@ export function ReportBuilder() {
                 and a polished PDF export.
               </p>
             </div>
-            {report ? (
-              <Button
-                disabled={pdfLoading}
-                onClick={handleDownloadPdf}
-                size="lg"
-                variant="gradient"
-                className="w-full shrink-0 md:w-auto"
-              >
-                {pdfLoading ? (
-                  <span className="h-4 w-16">
-                    <ProgressiveFluxLoader
-                      duration={3}
-                      showLabel={false}
-                      barClassName="h-4 bg-white/25"
-                      className="max-w-none gap-0"
-                    />
-                  </span>
-                ) : (
-                  <Download aria-hidden="true" />
-                )}
-                {pdfLoading ? "Generating PDF" : "Download PDF"}
-              </Button>
-            ) : null}
           </div>
           <AnimatePresence>
             {pdfLoading ? (
@@ -391,6 +533,7 @@ export function ReportBuilder() {
               onLoadSampleOcf={handleLoadSampleOcf}
               onLoadSamplePcf={handleLoadSamplePcf}
               fileName={report?.fileName}
+              compact={Boolean(report)}
               fill={!report}
             />
             {loading ? (
@@ -412,22 +555,53 @@ export function ReportBuilder() {
               </div>
             ) : null}
             {report ? (
-              <ReportSettingsPanel onChange={setSettings} settings={settings} />
-            ) : null}
-            {report ? (
-              <SectionControls
-                onAddSection={handleAddSection}
-                onApplyPreset={handleApplyPreset}
-                onRemoveSection={handleRemoveSection}
-                onReorderSections={handleReorderSections}
-                onRestoreSections={handleRestoreSections}
-                onSelectSection={setSelectedSectionId}
-                onToggleSection={handleToggleSection}
-                onUpdateSection={handleUpdateSection}
-                presets={sectionPresets}
-                sections={sections}
-                selectedSectionId={selectedSectionId}
-              />
+              <Card className="sticky top-4 min-w-0 overflow-hidden">
+                <CardHeader className="gap-2 border-b border-border/70 pb-4">
+                  <div className="min-w-0">
+                    <CardTitle>Report editor</CardTitle>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Select a section, edit it here, and watch the document update.
+                    </p>
+                  </div>
+                </CardHeader>
+                <CardContent className="min-h-0 min-w-0 space-y-4 p-4">
+                  <SectionList
+                    onAddSection={handleAddSection}
+                    onApplyPreset={handleApplyPreset}
+                    onRemoveSection={handleRemoveSection}
+                    onReorderSections={handleReorderSections}
+                    onRestoreSections={handleRestoreSections}
+                    onSelectSection={handleSelectSection}
+                    onToggleSection={handleToggleSection}
+                    presets={sectionPresets}
+                    sections={sections}
+                    selectedSectionId={selectedSectionId}
+                  />
+                  <SectionEditor
+                    onUpdateSection={handleUpdateSection}
+                    sections={sections}
+                    selectedSectionId={selectedSectionId}
+                  />
+                  <details className="group rounded-xl border border-border bg-secondary/30 p-4">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-foreground">
+                      Report settings and branding
+                      <span className="text-xs font-medium text-muted-foreground group-open:hidden">
+                        Open
+                      </span>
+                      <span className="hidden text-xs font-medium text-muted-foreground group-open:inline">
+                        Close
+                      </span>
+                    </summary>
+                    <div className="mt-4">
+                    <ReportSettingsPanel
+                      framed={false}
+                      onChange={setSettings}
+                      settings={settings}
+                    />
+                    </div>
+                  </details>
+                </CardContent>
+              </Card>
             ) : null}
           </aside>
 
@@ -435,56 +609,184 @@ export function ReportBuilder() {
             {report ? (
               <motion.div
                 key="report"
-                className="min-w-0 space-y-6"
+                className="min-w-0"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.35, ease: "easeOut" }}
               >
-                <KpiCards kpis={kpis} unit={report.unit} />
-                <div className="grid min-w-0 gap-6 xl:grid-cols-2">
-                  <ScopeDonut
-                    breakdown={themedReport.breakdown}
-                    total={themedReport.total.totalEmissions}
-                    title={themedReport.breakdownTitle}
-                    unit={themedReport.unit}
-                  />
-                  <TopCategories
-                    categories={themedReport.topCategories}
-                    title={themedReport.topTitle}
-                    emptyText={themedReport.topEmptyText}
-                    unit={themedReport.unit}
-                  />
-                </div>
-                <SiteEmissionsTable
-                  entities={report.entities}
-                  columns={report.entityColumns}
-                  entityLabel={report.entityLabel}
-                  noun={report.entityNoun}
-                  title={tableTitle}
-                  unit={report.unit}
-                  showFunctionalUnit={report.showFunctionalUnit}
-                />
                 <Card className="min-w-0 overflow-hidden">
-                  <CardHeader>
-                    <CardTitle>HTML report preview</CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      Source of truth for the PDF export. Click any title or paragraph to
-                      edit it inline.
-                    </p>
-                  </CardHeader>
-                  <CardContent className="px-0 pb-0">
-                    <div className="max-h-[820px] overflow-auto bg-secondary p-3 sm:p-4">
-                      <style>{HTML_REPORT_STYLES}</style>
-                      <HtmlReport
-                        report={themedReport}
-                        sections={sections}
-                        settings={settings}
-                        editable
-                        onUpdateSection={handleUpdateSection}
-                      />
+                  <CardHeader className="gap-4 border-b border-border/70 bg-card/95 pb-4">
+                    <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
+                        <Tabs
+                          aria-label="Report canvas view"
+                          className="w-full sm:w-auto"
+                          items={VIEW_TABS}
+                          onValueChange={setView}
+                          value={view}
+                        />
+                        <div className="min-w-0">
+                          <CardTitle>
+                            {view === "document"
+                              ? "HTML report preview"
+                              : "Report summary"}
+                          </CardTitle>
+                          <p className="text-sm text-muted-foreground">
+                            {view === "document"
+                              ? `A4 screen preview · ${pageCount} page${pageCount === 1 ? "" : "s"}`
+                              : tableTitle}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        {view === "document" ? (
+                          <div className="flex shrink-0 items-center gap-1 rounded-lg border border-border bg-card p-1">
+                            <Button
+                              aria-label="Zoom out"
+                              disabled={zoom <= 0.5}
+                              onClick={zoomOut}
+                              size="icon"
+                              type="button"
+                              variant="ghost"
+                            >
+                              <ZoomOut aria-hidden="true" />
+                            </Button>
+                            <span className="w-10 text-center text-xs font-medium tabular-nums text-muted-foreground">
+                              {Math.round(effectiveZoom * 100)}%
+                            </span>
+                            <Button
+                              aria-label="Zoom in"
+                              disabled={zoom >= 1.5}
+                              onClick={zoomIn}
+                              size="icon"
+                              type="button"
+                              variant="ghost"
+                            >
+                              <ZoomIn aria-hidden="true" />
+                            </Button>
+                            <Button
+                              aria-label="Reset zoom"
+                              disabled={zoom === 1}
+                              onClick={zoomReset}
+                              size="icon"
+                              type="button"
+                              variant="ghost"
+                            >
+                              <Maximize2 aria-hidden="true" />
+                            </Button>
+                          </div>
+                        ) : null}
+                        <Button
+                          className="w-full sm:w-auto"
+                          disabled={pdfLoading}
+                          onClick={handleDownloadPdf}
+                          size="sm"
+                          type="button"
+                          variant="gradient"
+                        >
+                          {pdfLoading ? (
+                            <Loader2 aria-hidden="true" className="animate-spin" />
+                          ) : (
+                            <Download aria-hidden="true" />
+                          )}
+                          {pdfLoading ? "Generating" : "Download PDF"}
+                        </Button>
+                      </div>
                     </div>
-                  </CardContent>
+                  </CardHeader>
+
+                  {view === "summary" ? (
+                    <CardContent className="bg-secondary/30 p-4 sm:p-5">
+                      <div className="min-w-0 space-y-6">
+                        <KpiCards kpis={kpis} unit={report.unit} />
+                        <div className="grid min-w-0 gap-6 xl:grid-cols-2">
+                          <ScopeDonut
+                            breakdown={report.breakdown}
+                            total={report.total.totalEmissions}
+                            title={report.breakdownTitle}
+                            unit={report.unit}
+                          />
+                          <TopCategories
+                            categories={report.topCategories}
+                            title={report.topTitle}
+                            emptyText={report.topEmptyText}
+                            unit={report.unit}
+                          />
+                        </div>
+                        <SiteEmissionsTable
+                          entities={report.entities}
+                          columns={report.entityColumns}
+                          entityLabel={report.entityLabel}
+                          noun={report.entityNoun}
+                          title={tableTitle}
+                          unit={report.unit}
+                          showFunctionalUnit={report.showFunctionalUnit}
+                        />
+                      </div>
+                    </CardContent>
+                  ) : (
+                    <CardContent className="p-0">
+                      <div
+                        ref={setPreviewEl}
+                        className="report-preview-viewport max-h-[calc(100dvh-12rem)] min-h-[520px] overflow-auto p-3 sm:p-4"
+                      >
+                        <style>{HTML_REPORT_STYLES}</style>
+                        <style>{HTML_REPORT_PREVIEW_STYLES}</style>
+                        <div
+                          className="report-preview-zoom"
+                          style={{ zoom: effectiveZoom }}
+                        >
+                          <div className="report-preview-a4">
+                            <HtmlReport
+                              report={report}
+                              sections={sections}
+                              settings={settings}
+                              editable
+                              onSelectSection={handlePreviewSectionSelect}
+                              onUpdateSection={handleUpdateSection}
+                              selectedSectionId={selectedSectionId}
+                            />
+                            {Array.from({ length: pageCount }, (_, index) => (
+                              <div
+                                aria-hidden="true"
+                                className="report-preview-page-chrome"
+                                key={index}
+                                style={{ "--page-index": index }}
+                              >
+                                <div className="report-preview-page-header">
+                                  <span className="report-preview-page-brand">
+                                    <strong>{settings.clientName || report.clientName}</strong>
+                                  </span>
+                                  <span className="report-preview-page-title">
+                                    {settings.reportLabel || report.reportTitle} |{" "}
+                                    {settings.reportYear || "2024"}
+                                  </span>
+                                </div>
+                                <div className="report-preview-page-footer">
+                                  <span>
+                                    Prepared by{" "}
+                                    <strong>
+                                      {settings.preparedBy || "Footprint Mappa"}
+                                    </strong>
+                                  </span>
+                                  <span>
+                                    Page {index + 1} of {pageCount}
+                                  </span>
+                                </div>
+                                <span className="report-preview-page-label">
+                                  Page {index + 1}
+                                </span>
+                                {index + 1 < pageCount ? (
+                                  <span className="report-preview-page-break" />
+                                ) : null}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  )}
                 </Card>
               </motion.div>
             ) : (

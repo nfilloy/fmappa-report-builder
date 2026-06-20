@@ -9,14 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { BRAND } from "@/lib/report/chartTheme";
 import { extractPalette } from "@/lib/color/extractPalette";
+import { ensureReadable } from "@/lib/color/contrast";
 
 const ACCENT_PRESETS = [
-  { label: "Relats red", value: "#b91c1c" },
-  { label: "Graphite", value: "#18181b" },
   { label: "Mappa navy", value: BRAND.navy },
+  { label: "Mappa teal", value: BRAND.teal },
   { label: "Mappa coral", value: BRAND.coral },
   { label: "Mappa peach", value: BRAND.peach },
-  { label: "Mappa teal", value: BRAND.teal },
+  { label: "Relats red", value: "#b91c1c" },
+  { label: "Graphite", value: "#18181b" },
 ];
 
 // Returns a normalised #rrggbb string, or null when the input is not a valid
@@ -26,7 +27,11 @@ function normalizeHex(value) {
   return /^[0-9a-fA-F]{6}$/.test(hex) ? `#${hex.toLowerCase()}` : null;
 }
 
-export const ReportSettingsPanel = memo(function ReportSettingsPanel({ settings, onChange }) {
+export const ReportSettingsPanel = memo(function ReportSettingsPanel({
+  settings,
+  onChange,
+  framed = true,
+}) {
   const logoInputRef = useRef(null);
   // Native colour inputs are uncontrolled (defaultValue) to avoid a feedback
   // loop where writing `value` back into an open picker re-fires onChange. This
@@ -98,7 +103,7 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({ settings,
         ...settings,
         logoDataUrl: dataUrl,
         ...(colors.length
-          ? { palette: colors, accentColor: colors[0] }
+          ? { accentColor: ensureReadable(colors[0]), accentSource: "logo" }
           : {}),
       });
       if (colors.length) {
@@ -108,7 +113,7 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({ settings,
     reader.readAsDataURL(file);
   }
 
-  async function resetPaletteFromLogo() {
+  async function resyncAccentFromLogo() {
     if (!settings.logoDataUrl) {
       return;
     }
@@ -116,17 +121,17 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({ settings,
     const colors = await extractPalette(settings.logoDataUrl);
 
     if (colors.length) {
-      onChange({ ...settings, palette: colors, accentColor: colors[0] });
+      onChange({
+        ...settings,
+        accentColor: ensureReadable(colors[0]),
+        accentSource: "logo",
+      });
       bumpColorVersion();
     }
   }
 
-  return (
-    <Card className="min-w-0">
-      <CardHeader>
-        <CardTitle>Report branding</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+  const fields = (
+    <div className="space-y-4">
         <label className="block text-sm font-medium text-foreground">
           Client name
           <Input
@@ -223,7 +228,8 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({ settings,
         <div className="rounded-xl border border-border bg-secondary/40 p-4">
           <p className="text-sm font-semibold text-foreground">Client logo</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Optional logo embedded on the exported report cover.
+            Embedded on the report cover. Uploading a logo also derives the
+            report accent colour from it; remove it to fall back to Mappa.
           </p>
           <div className="mt-3 flex min-w-0 flex-wrap items-center gap-3">
             {settings.logoDataUrl ? (
@@ -244,18 +250,34 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({ settings,
               {settings.logoDataUrl ? "Replace" : "Upload logo"}
             </Button>
             {settings.logoDataUrl ? (
-              <Button
-                aria-label="Remove logo"
-                onClick={() => {
-                  onChange({ ...settings, logoDataUrl: "", palette: [] });
-                  bumpColorVersion();
-                }}
-                size="icon"
-                type="button"
-                variant="ghost"
-              >
-                <X aria-hidden="true" />
-              </Button>
+              <>
+                <Button
+                  onClick={resyncAccentFromLogo}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <RefreshCw aria-hidden="true" />
+                  Sync accent
+                </Button>
+                <Button
+                  aria-label="Remove logo"
+                  onClick={() => {
+                    onChange({
+                      ...settings,
+                      logoDataUrl: "",
+                      accentColor: BRAND.navy,
+                      accentSource: "mappa",
+                    });
+                    bumpColorVersion();
+                  }}
+                  size="icon"
+                  type="button"
+                  variant="ghost"
+                >
+                  <X aria-hidden="true" />
+                </Button>
+              </>
             ) : null}
             <input
               accept="image/*"
@@ -267,53 +289,11 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({ settings,
           </div>
         </div>
 
-        {settings.palette?.length ? (
-          <div className="rounded-xl border border-border bg-secondary/40 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-foreground">Brand palette</p>
-              <Button
-                disabled={!settings.logoDataUrl}
-                onClick={resetPaletteFromLogo}
-                size="sm"
-                type="button"
-                variant="ghost"
-              >
-                <RefreshCw aria-hidden="true" />
-                Reset to logo
-              </Button>
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Extracted from the logo and used to colour the PDF charts. Edit any
-              swatch to override.
-            </p>
-            <div className="mt-3 flex gap-2">
-              {settings.palette.map((color, index) => (
-                <input
-                  aria-label={`Palette colour ${index + 1}`}
-                  className="h-9 flex-1 cursor-pointer rounded-md border border-border bg-card p-1"
-                  key={`palette-${colorVersion}-${index}`}
-                  onBlur={flushColor}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    scheduleColorCommit((prev) => ({
-                      ...prev,
-                      palette: (prev.palette || []).map((c, i) =>
-                        i === index ? value : c,
-                      ),
-                    }));
-                  }}
-                  type="color"
-                  defaultValue={normalizeHex(color) || "#000000"}
-                />
-              ))}
-            </div>
-          </div>
-        ) : null}
-
         <div className="rounded-xl border border-border bg-secondary/40 p-4">
           <p className="text-sm font-semibold text-foreground">Accent color</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Accent colour of the exported Relats report (not the app theme).
+            Brand accent of the exported report (cover, headings, badges). Charts
+            keep the fixed Mappa palette. Derived from the logo when one is set.
           </p>
           <div className="mt-3 flex items-center gap-2">
             <input
@@ -323,10 +303,14 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({ settings,
               onBlur={flushColor}
               onChange={(event) => {
                 const value = event.target.value;
-                scheduleColorCommit((prev) => ({ ...prev, accentColor: value }));
+                scheduleColorCommit((prev) => ({
+                  ...prev,
+                  accentColor: value,
+                  accentSource: "manual",
+                }));
               }}
               type="color"
-              defaultValue={normalizeHex(settings.accentColor) || "#b91c1c"}
+              defaultValue={normalizeHex(settings.accentColor) || BRAND.navy}
             />
             <Input
               aria-label="Accent colour hex"
@@ -334,10 +318,10 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({ settings,
               onChange={(event) => {
                 const next = normalizeHex(event.target.value);
                 if (next) {
-                  updateSetting("accentColor", next);
+                  onChange({ ...settings, accentColor: next, accentSource: "manual" });
                 }
               }}
-              placeholder="#b91c1c"
+              placeholder={BRAND.navy}
               defaultValue={settings.accentColor}
               key={`hex-${colorVersion}`}
             />
@@ -349,7 +333,11 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({ settings,
                 className="h-8 rounded-md border border-border outline-none ring-offset-2 ring-offset-background transition focus:ring-2 focus:ring-ring"
                 key={color.value}
                 onClick={() => {
-                  updateSetting("accentColor", color.value);
+                  onChange({
+                    ...settings,
+                    accentColor: color.value,
+                    accentSource: "manual",
+                  });
                   bumpColorVersion();
                 }}
                 style={{
@@ -365,6 +353,20 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({ settings,
             ))}
           </div>
         </div>
+    </div>
+  );
+
+  if (!framed) {
+    return fields;
+  }
+
+  return (
+    <Card className="min-w-0">
+      <CardHeader>
+        <CardTitle>Report branding</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {fields}
       </CardContent>
     </Card>
   );

@@ -3,6 +3,7 @@ import { memo, useMemo } from "react";
 import { formatEmissions, formatPercent } from "@/lib/formatters";
 import { maxByValue, percentageOfMax } from "@/lib/report/chartData";
 import { SEQUENTIAL_COLORS } from "@/lib/report/chartTheme";
+import { buildBrandTheme } from "@/lib/report/brandTheme";
 import { enabledSections } from "@/lib/report/sections";
 import {
   breakdownLegendHtml,
@@ -279,6 +280,41 @@ function InsightsReport({ section, editable, onUpdateSection }) {
   );
 }
 
+function NarrativeAnalysisReport({ section, editable, onUpdateSection }) {
+  const items = useMemo(() => paragraphs(section.content), [section.content]);
+
+  return (
+    <Editable
+      className="analysis-block"
+      editable={editable}
+      title="Click to edit"
+      onCommit={(text) => onUpdateSection(section.id, { content: text })}
+    >
+      {items.map((paragraph, index) => (
+        <p key={`${paragraph}-${index}`}>{paragraph}</p>
+      ))}
+    </Editable>
+  );
+}
+
+function RecommendationsReport({ section, editable, onUpdateSection }) {
+  const items = useMemo(() => paragraphs(section.content), [section.content]);
+
+  return (
+    <Editable
+      as="ol"
+      className="recommendation-list"
+      editable={editable}
+      title="Click to edit"
+      onCommit={(text) => onUpdateSection(section.id, { content: text })}
+    >
+      {items.map((item, index) => (
+        <li key={`${item}-${index}`}>{item}</li>
+      ))}
+    </Editable>
+  );
+}
+
 function SectionBody({ section, report, editable, onUpdateSection }) {
   const editProps = { editable, onUpdateSection };
 
@@ -327,6 +363,14 @@ function SectionBody({ section, report, editable, onUpdateSection }) {
     );
   }
 
+  if (section.type === "narrative-analysis") {
+    return <NarrativeAnalysisReport section={section} {...editProps} />;
+  }
+
+  if (section.type === "recommendations") {
+    return <RecommendationsReport section={section} {...editProps} />;
+  }
+
   return (
     <>
       <TextReport section={section} {...editProps} />
@@ -340,6 +384,7 @@ function sectionClassName(section) {
     "report-section",
     `report-section--${section.id}`,
     `report-section--${section.type}`,
+    section.printMode ? `report-section--print-${section.printMode}` : "",
   ].join(" ");
 }
 
@@ -349,10 +394,12 @@ export const HtmlReport = memo(function HtmlReport({
   settings,
   editable = false,
   onUpdateSection,
+  onSelectSection,
+  selectedSectionId,
 }) {
   const clientName = settings?.clientName || report.clientName;
   const reportLabel = settings?.reportLabel || report.reportTitle;
-  const accentColor = settings?.accentColor || "#b91c1c";
+  const brand = buildBrandTheme(settings);
   const reportYear = settings?.reportYear || "2024";
   const preparedBy = settings?.preparedBy || "Footprint Mappa";
   const preparedFor = settings?.preparedFor || "";
@@ -368,7 +415,10 @@ export const HtmlReport = memo(function HtmlReport({
   if (reportDate) eyebrow.push(reportDate);
 
   return (
-    <article className="report-page" style={{ "--report-accent": accentColor }}>
+    <article
+      className="report-page"
+      style={{ "--report-accent": brand.accent, "--report-on-accent": brand.onAccent }}
+    >
       <header className="report-cover">
         <div className="cover-topline">
           {logoDataUrl ? (
@@ -434,7 +484,18 @@ export const HtmlReport = memo(function HtmlReport({
       </nav>
 
       {visibleSections.map((section) => (
-        <section className={sectionClassName(section)} key={section.id}>
+        <section
+          className={[
+            sectionClassName(section),
+            editable && section.id === selectedSectionId
+              ? "report-section--active-preview"
+              : "",
+          ].join(" ")}
+          key={section.id}
+          data-section-id={section.id}
+          onClick={editable ? () => onSelectSection?.(section.id) : undefined}
+          onFocus={editable ? () => onSelectSection?.(section.id) : undefined}
+        >
           <h2>
             <Editable
               as="span"

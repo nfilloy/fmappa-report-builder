@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -44,8 +43,7 @@ async function waitForServer(url, getLogs, timeoutMs = 60000) {
 
 function startNext() {
   const nextBin = join(process.cwd(), "node_modules", "next", "dist", "bin", "next");
-  const hasProductionBuild = existsSync(join(process.cwd(), ".next", "BUILD_ID"));
-  const mode = hasProductionBuild ? "start" : "dev";
+  const mode = "dev";
   const child = spawn(process.execPath, [nextBin, mode, "-p", String(PORT), "-H", "127.0.0.1"], {
     cwd: process.cwd(),
     env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
@@ -153,6 +151,53 @@ test("report builder stays within the viewport across responsive widths", async 
 
       await page.close();
     }
+  } finally {
+    await browser?.close();
+    server?.child.kill();
+  }
+});
+
+test("section outline edits the live document preview", async () => {
+  const server = EXTERNAL_TEST_URL ? null : startNext();
+  const baseUrl = EXTERNAL_TEST_URL || BASE_URL;
+  let browser;
+
+  try {
+    if (server) {
+      await waitForServer(baseUrl, server.logs);
+    }
+
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
+    await page.goto(baseUrl, { waitUntil: "networkidle" });
+    await page
+      .getByLabel(/upload ocf or pcf csv file/i)
+      .setInputFiles(SAMPLE_CSV);
+    await page.getByText("HTML report preview").waitFor({ timeout: 15000 });
+
+    await page
+      .locator("aside button")
+      .filter({ hasText: "Methodological approach" })
+      .first()
+      .click();
+    await page.getByLabel("Section copy").fill("Live editor proof text.");
+
+    await page
+      .locator("[data-section-id='methodology']")
+      .filter({ hasText: "Live editor proof text." })
+      .waitFor({ timeout: 5000 });
+
+    const activeSectionId = await page.evaluate(() => {
+      const active = document.querySelector(".report-section--active-preview");
+      return active?.getAttribute("data-section-id");
+    });
+
+    assert.equal(activeSectionId, "methodology");
+
+    await page
+      .locator("[data-section-id='methodology']")
+      .getByText("Live editor proof text.")
+      .waitFor({ timeout: 5000 });
   } finally {
     await browser?.close();
     server?.child.kill();

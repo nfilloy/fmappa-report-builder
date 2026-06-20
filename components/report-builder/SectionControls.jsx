@@ -22,18 +22,38 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronDown, Eye, EyeOff, GripVertical, Plus, RotateCcw, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
-const TileInner = memo(function TileInner({ section, isSelected, dragging, onToggleSection, onSelectSection, onRemoveSection }) {
+const TYPE_LABELS = {
+  "category-tables": "Data tables",
+  chart: "Chart",
+  insights: "Insights",
+  metrics: "Metrics",
+  "narrative-analysis": "Narrative",
+  recommendations: "Recommendations",
+  table: "Table",
+  text: "Text",
+};
+
+function sectionTypeLabel(section) {
+  if (section.removable) {
+    return "Custom";
+  }
+
+  return TYPE_LABELS[section.type] || section.type;
+}
+
+const TileInner = memo(function TileInner({ section, index, isSelected, dragging, onToggleSection, onSelectSection, onRemoveSection }) {
   return (
     <div
-      className={`flex min-w-0 items-center gap-3 rounded-xl border p-3 transition-all ${
+      className={`group flex min-w-0 items-center gap-2 rounded-lg border p-2.5 transition-all ${
         isSelected
           ? "border-primary bg-primary/5 shadow-[0_0_0_1px_var(--primary)]"
           : "border-border bg-card hover:border-primary/40 hover:bg-secondary/40"
@@ -41,34 +61,41 @@ const TileInner = memo(function TileInner({ section, isSelected, dragging, onTog
     >
       <span
         aria-hidden="true"
-        className="shrink-0 text-muted-foreground"
+        className="shrink-0 cursor-grab text-muted-foreground"
         title="Drag to reorder"
       >
-        <GripVertical className="h-5 w-5" />
+        <GripVertical className="h-4 w-4" />
       </span>
-      <label
-        className="flex min-w-0 flex-1 items-center gap-3 text-sm text-foreground"
+      <button
+        aria-label={section.enabled ? `Hide ${section.title}` : `Show ${section.title}`}
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+        onClick={() => onToggleSection(section.id)}
         onPointerDown={(event) => event.stopPropagation()}
+        type="button"
       >
-        <input
-          checked={section.enabled}
-          className="h-4 w-4 accent-[var(--primary)]"
-          onChange={() => onToggleSection(section.id)}
-          type="checkbox"
-        />
-        <button
-          className="min-w-0 flex-1 text-left"
-          onClick={() => onSelectSection(section.id)}
-          type="button"
-        >
-          <span className="block truncate font-medium" title={section.title}>
+        {section.enabled ? (
+          <Eye aria-hidden="true" className="h-4 w-4" />
+        ) : (
+          <EyeOff aria-hidden="true" className="h-4 w-4" />
+        )}
+      </button>
+      <button
+        className="min-w-0 flex-1 text-left"
+        onClick={() => onSelectSection(section.id)}
+        type="button"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="w-6 shrink-0 text-xs font-semibold tabular-nums text-muted-foreground">
+            {String(index + 1).padStart(2, "0")}
+          </span>
+          <span className="block min-w-0 truncate text-sm font-medium" title={section.title}>
             {section.title}
           </span>
-          <span className="mt-1 block truncate text-xs uppercase tracking-wide text-muted-foreground">
-            {section.removable ? "custom · text" : section.type}
-          </span>
-        </button>
-      </label>
+        </span>
+        <span className="mt-1 block truncate pl-8 text-xs text-muted-foreground">
+          {section.enabled ? "Included" : "Hidden"} · {sectionTypeLabel(section)}
+        </span>
+      </button>
       {section.removable ? (
         <span onPointerDown={(event) => event.stopPropagation()}>
           <Button
@@ -120,13 +147,12 @@ const SortableSectionTile = memo(function SortableSectionTile(props) {
   );
 });
 
-export const SectionControls = memo(function SectionControls({
+export const SectionList = memo(function SectionList({
   sections,
   onToggleSection,
   onReorderSections,
   onRestoreSections,
   onSelectSection,
-  onUpdateSection,
   onAddSection,
   onRemoveSection,
   onApplyPreset,
@@ -179,10 +205,12 @@ export const SectionControls = memo(function SectionControls({
   }, [onReorderSections, sections]);
 
   return (
-    <Card className="min-w-0">
-      <CardHeader className="flex-row items-start justify-between gap-3">
+    <div className="flex min-h-0 min-w-0 flex-col gap-4">
+      <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <CardTitle>Template sections</CardTitle>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Document outline
+          </h2>
           <p className="mt-1 text-xs text-muted-foreground">
             {enabledCount} of {sections.length} included in PDF
           </p>
@@ -196,115 +224,171 @@ export const SectionControls = memo(function SectionControls({
         >
           <RotateCcw aria-hidden="true" />
         </Button>
-      </CardHeader>
-      <CardContent className="min-w-0 space-y-4">
-        <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Templates
-          </p>
-          <div className="mt-2 flex min-w-0 flex-wrap gap-2">
-            {Object.entries(presets).map(([presetId, preset]) => (
-              <Button
-                key={presetId}
-                onClick={() => onApplyPreset(presetId)}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                {preset.label}
-              </Button>
+      </div>
+
+      <details className="group min-w-0 rounded-lg border border-border bg-secondary/30 p-3">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-foreground">
+          Templates
+          <ChevronDown
+            aria-hidden="true"
+            className="h-4 w-4 text-muted-foreground transition group-open:rotate-180"
+          />
+        </summary>
+        <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+          {Object.entries(presets).map(([presetId, preset]) => (
+            <Button
+              key={presetId}
+              onClick={() => onApplyPreset(presetId)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {preset.label}
+            </Button>
+          ))}
+        </div>
+      </details>
+
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+        onDragStart={(event) => setActiveId(event.active.id)}
+        onDragCancel={() => setActiveId(null)}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={sectionIds}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className="max-h-[34dvh] min-h-[220px] space-y-2 overflow-auto pr-1">
+            {sections.map((section, index) => (
+              <SortableSectionTile
+                key={section.id}
+                index={index}
+                isSelected={section.id === selectedSection?.id}
+                onRemoveSection={onRemoveSection}
+                onSelectSection={onSelectSection}
+                onToggleSection={onToggleSection}
+                section={section}
+              />
             ))}
           </div>
+        </SortableContext>
+        <DragOverlay>
+          {activeSection ? (
+            <div className="rotate-[-1.5deg] scale-[1.03] cursor-grabbing">
+              <TileInner
+                dragging
+                isSelected={activeSection.id === selectedSection?.id}
+                onRemoveSection={() => {}}
+                onSelectSection={() => {}}
+                onToggleSection={() => {}}
+                section={activeSection}
+              />
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+
+      <Button
+        className="w-full"
+        onClick={onAddSection}
+        type="button"
+        variant="outline"
+      >
+        <Plus aria-hidden="true" />
+        Add section
+      </Button>
+    </div>
+  );
+});
+
+export const SectionEditor = memo(function SectionEditor({
+  className,
+  sections,
+  selectedSectionId,
+  onUpdateSection,
+}) {
+  const selectedSection = useMemo(
+    () =>
+      sections.find((section) => section.id === selectedSectionId) || sections[0],
+    [sections, selectedSectionId],
+  );
+
+  if (!selectedSection) {
+    return (
+      <div
+        className={cn(
+          "rounded-xl border border-dashed border-border bg-secondary/30 p-4 text-sm text-muted-foreground",
+          className,
+        )}
+      >
+        Select a section in the document to edit its copy.
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "rounded-xl border border-border bg-card p-4 shadow-sm",
+        className,
+      )}
+    >
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="min-w-0 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Edit selected section
+          </h2>
+          <p className="mt-1 truncate text-base font-semibold text-foreground">
+            {selectedSection.title}
+          </p>
         </div>
+        <Badge variant="outline">
+          {sectionTypeLabel(selectedSection)}
+        </Badge>
+      </div>
+      <label className="mt-4 block text-sm font-medium text-foreground">
+        Title
+        <Input
+          className="mt-2"
+          onChange={(event) =>
+            onUpdateSection(selectedSection.id, { title: event.target.value })
+          }
+          value={selectedSection.title}
+        />
+      </label>
+      <label className="mt-4 block text-sm font-medium text-foreground">
+        Section copy
+        <Textarea
+          className="mt-2 min-h-56 resize-y"
+          onChange={(event) =>
+            onUpdateSection(selectedSection.id, {
+              content: event.target.value,
+            })
+          }
+          value={selectedSection.content}
+        />
+      </label>
+      <p className="mt-2 text-xs leading-5 text-muted-foreground">
+        Changes update the document preview immediately. For data sections, this
+        copy appears above the generated table or chart.
+      </p>
+    </div>
+  );
+});
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-          onDragStart={(event) => setActiveId(event.active.id)}
-          onDragCancel={() => setActiveId(null)}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={sectionIds}
-            strategy={verticalListSortingStrategy}
-          >
-            <div className="space-y-2">
-              {sections.map((section) => (
-                <SortableSectionTile
-                  key={section.id}
-                  isSelected={section.id === selectedSection?.id}
-                  onRemoveSection={onRemoveSection}
-                  onSelectSection={onSelectSection}
-                  onToggleSection={onToggleSection}
-                  section={section}
-                />
-              ))}
-            </div>
-          </SortableContext>
-          <DragOverlay>
-            {activeSection ? (
-              <div className="rotate-[-1.5deg] scale-[1.03] cursor-grabbing">
-                <TileInner
-                  dragging
-                  isSelected={activeSection.id === selectedSection?.id}
-                  onRemoveSection={() => {}}
-                  onSelectSection={() => {}}
-                  onToggleSection={() => {}}
-                  section={activeSection}
-                />
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-
-        <Button
-          className="w-full"
-          onClick={onAddSection}
-          type="button"
-          variant="outline"
-        >
-          <Plus aria-hidden="true" />
-          Add section
-        </Button>
-
-        {selectedSection ? (
-          <div className="rounded-xl border border-border bg-secondary/40 p-4">
-            <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-              <h3 className="min-w-0 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Edit section
-              </h3>
-              <Badge variant="outline">
-                {selectedSection.removable ? "custom" : selectedSection.type}
-              </Badge>
-            </div>
-            <label className="mt-4 block text-sm font-medium text-foreground">
-              Title
-              <Input
-                className="mt-2"
-                onChange={(event) =>
-                  onUpdateSection(selectedSection.id, { title: event.target.value })
-                }
-                value={selectedSection.title}
-              />
-            </label>
-            <label className="mt-4 block text-sm font-medium text-foreground">
-              Section copy
-              <Textarea
-                className="mt-2"
-                onChange={(event) =>
-                  onUpdateSection(selectedSection.id, {
-                    content: event.target.value,
-                  })
-                }
-                value={selectedSection.content}
-              />
-            </label>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              For data sections, this copy appears above the generated table or chart.
-            </p>
-          </div>
-        ) : null}
+export const SectionControls = memo(function SectionControls(props) {
+  return (
+    <Card className="min-w-0">
+      <CardContent className="min-w-0 space-y-4">
+        <SectionList {...props} />
+        <SectionEditor
+          onUpdateSection={props.onUpdateSection}
+          sections={props.sections}
+          selectedSectionId={props.selectedSectionId}
+        />
       </CardContent>
     </Card>
   );

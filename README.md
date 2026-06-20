@@ -1,9 +1,9 @@
 # Footprint Mappa Report Builder
 
-Path B-oriented Organisational Carbon Footprint (OCF) report builder built from the Path A foundation.
+Path B-oriented Organisational Carbon Footprint (OCF) and Product Carbon Footprint (PCF) report builder built from the Path A foundation.
 
 ```txt
-User uploads CSV -> browser parser -> normalised OCF model -> configurable section model -> HTML preview -> Playwright PDF
+User uploads CSV -> browser parser -> normalised OCF/PCF model -> configurable section model -> HTML preview -> Playwright PDF
 ```
 
 Uploaded files are parsed client-side. The app does not store or persist the CSV. The generated report model is sent to a minimal Next.js API route only when the user downloads the PDF.
@@ -12,9 +12,9 @@ Uploaded files are parsed client-side. The app does not store or persist the CSV
 
 I started with **Path A: Foundation** and evolved it into a **Path B: Customizable** report builder.
 
-The implementation still focuses on one domain, OCF, and uses the provided ISO 14064 sample data. The report is now represented as configurable sections with basic branding controls, rendered as an HTML preview, and exported to PDF through a minimal Playwright API route.
+The implementation supports OCF and PCF sample data. The report is represented as configurable sections with basic branding controls, rendered as an HTML preview, and exported to PDF through a minimal Playwright API route.
 
-I intentionally did not implement PCF, database persistence, authentication, full template editing, or runtime AI integration in this MVP. Path C remains a documented future evolution over the section model.
+I intentionally did not implement database persistence, authentication, full template editing, DOCX export, or runtime AI integration in this MVP. Path C remains a documented future evolution over the section model.
 
 ## Stack
 
@@ -103,10 +103,11 @@ If `Total empresa` exists, it is treated as the official total. If it is missing
 - Shows scope breakdown percentages.
 - Shows site emissions by plant.
 - Shows the largest Scope 3 categories.
-- Builds a section-based report model.
+- Builds a consulting-style section-based report model.
 - Allows sections to be enabled, disabled and reordered.
+- Adds editable narrative sections for introduction, methodology, comparative analysis, conclusions and strategic recommendations.
 - Allows basic report branding configuration.
-- Renders an HTML report preview as the source of truth.
+- Renders an editable A4-style HTML report preview as the source of truth.
 - Generates a downloadable PDF from that HTML preview through `/api/pdf`.
 
 ## PDF Strategy
@@ -117,19 +118,24 @@ The report model is rendered as HTML/CSS first. The browser preview is the sourc
 
 Playwright is used because it is a better fit for configurable sections, branding and future Path C support than maintaining a separate PDF-only rendering surface.
 
+The in-browser A4 canvas shows page boundaries, headers and footers to make editing feel close to the exported report. Pagination in the preview is an honest approximation; the exact final page breaks are still decided by Chromium during PDF export.
+
 The PDF includes:
 
 - Executive summary
-- Methodology
-- Organisational boundary
+- Introduction
+- Methodological approach
+- Organisational or product boundary
 - Global results
-- Scope breakdown
-- Site emissions
+- Scope or lifecycle breakdown
+- Site or product emissions
 - Key insights
 - Detailed Scope 1, Scope 2 and Scope 3 category tables
+- Narrative analysis sections
+- Strategic recommendations
 - Limitations and next steps
 
-The report is intentionally simpler than the provided Word sample. The focus is a correct and traceable Path A output, not a full recreation of the final consulting report.
+The report is still generated from the uploaded CSV and editable section text. It is designed to be much closer to the provided consulting examples, while avoiding claims or detailed tables that are not present in the source data.
 
 ## Minimal API Surface
 
@@ -187,23 +193,20 @@ The main time went into:
 
 ## What I Would Do With More Time
 
-1. Add Relats-specific branding to the PDF using public materials: logo, palette and typography.
-2. Make the HTML/PDF report visually closer to the provided OCF Word sample.
-3. Add charts for scope distribution, site contribution and Scope 3 hotspots.
-4. Add optional Path C support by integrating an AI provider server-side over the section model.
-5. Add a sample CSV loader/download button in the UI.
-6. Improve validation for numeric formats, empty cells and inconsistent totals.
-7. Add PCF as a separate path only after the OCF flow is solid.
-8. Evaluate PrinceXML or DocRaptor if production-grade pagination becomes the priority.
+1. Add richer Relats-specific brand templates using approved assets.
+2. Add optional structured fields for baseline year, product family, site, material composition and scenario metadata.
+3. Add optional Path C support by integrating an AI provider server-side over the section model.
+4. Improve validation for numeric formats, empty cells and inconsistent totals.
+5. Evaluate PrinceXML or DocRaptor if production-grade pagination becomes the priority.
 
 ## Limitations
 
-- OCF only; PCF is not implemented.
 - No database, authentication or persistence.
-- The PDF is a concise MVP report, not a full consulting-grade Word report replica.
+- The PDF is not a pixel-perfect replica of the provided Word reports.
+- The A4 preview page guides are approximate; exported pagination is generated by Chromium.
 - Relats branding is not fully implemented yet.
 - Playwright PDF generation requires browser binaries to be available in the execution environment.
 - Runtime AI is not implemented.
 - Numeric parsing is intentionally simple.
 - Emission factors and carbon calculation methodology are out of scope; the app presents already calculated sample data.
-- The detailed category mapping is tailored to the provided OCF CSV schema.
+- Consulting details that are not present in the CSV, such as baseline comparisons and recommendations, are handled through editable report sections.

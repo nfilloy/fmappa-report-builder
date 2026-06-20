@@ -48,11 +48,16 @@ test("builds enabled report sections and reorders them", () => {
   assert.ok(sections.length > 0);
   assert.ok(sections.every((section) => section.enabled));
   assert.equal(sections[0].id, "executive-summary");
+  assert.ok(sections.some((section) => section.id === "introduction"));
+  assert.ok(sections.some((section) => section.id === "scope-analysis"));
+  assert.ok(sections.some((section) => section.id === "comparative-analysis"));
+  assert.ok(sections.some((section) => section.type === "recommendations"));
 
   const reordered = reorderSection(sections, "methodology", "up");
 
-  assert.equal(reordered[0].id, "methodology");
-  assert.equal(reordered[1].id, "executive-summary");
+  assert.equal(reordered[0].id, "executive-summary");
+  assert.equal(reordered[1].id, "methodology");
+  assert.equal(reordered[2].id, "introduction");
 });
 
 test("updates editable section fields and can rebuild default sections", () => {
@@ -117,6 +122,30 @@ test("applies a preset, ordering and toggling base sections while keeping custom
   const custom = createCustomSection(0);
   const sections = [...buildReportSections(report), custom];
 
+  const consulting = applyPreset(sections, "consulting");
+  assert.deepEqual(
+    consulting
+      .filter((section) => section.enabled && !section.removable)
+      .map((section) => section.id),
+    [
+      "executive-summary",
+      "introduction",
+      "methodology",
+      "organisational-boundary",
+      "scope-definitions",
+      "global-results",
+      "scope-breakdown",
+      "site-emissions",
+      "detailed-categories",
+      "scope-analysis",
+      "comparative-analysis",
+      "key-insights",
+      "overall-conclusions",
+      "strategic-recommendations",
+      "limitations",
+    ],
+  );
+
   const executive = applyPreset(sections, "executive");
 
   const enabledIds = executive
@@ -141,6 +170,7 @@ test("applies a preset, ordering and toggling base sections while keeping custom
   // Unknown preset returns the sections unchanged.
   assert.equal(applyPreset(sections, "unknown"), sections);
 });
+
 
 test("builds safe chart bar percentages", () => {
   assert.equal(percentageOfMax(50, 100), 50);

@@ -64,7 +64,12 @@ test("builds PCF report sections with lifecycle-specific ids", () => {
   const sections = buildReportSections(report);
 
   const ids = sections.map((section) => section.id);
+  assert.ok(ids.includes("introduction"));
   assert.ok(ids.includes("lifecycle-breakdown"));
   assert.ok(ids.includes("product-results"));
+  assert.ok(ids.includes("lifecycle-analysis"));
+  assert.ok(ids.includes("strategic-recommendations"));
+  assert.ok(sections.some((section) => section.type === "narrative-analysis"));
+  assert.ok(sections.some((section) => section.type === "recommendations"));
   assert.ok(sections.every((section) => section.enabled));
 });
