@@ -1,5 +1,6 @@
 "use client";
 
+import { memo, useMemo } from "react";
 import {
   Bar,
   BarChart,
@@ -11,7 +12,7 @@ import {
   YAxis,
 } from "recharts";
 
-import { formatTonnes } from "@/lib/formatters";
+import { formatEmissions } from "@/lib/formatters";
 import { CHART_AXIS, CHART_GRID, SEQUENTIAL_COLORS } from "@/lib/report/chartTheme";
 
 function shortLabel(value) {
@@ -19,7 +20,7 @@ function shortLabel(value) {
   return label.length > 22 ? `${label.slice(0, 21)}...` : label;
 }
 
-function ChartTooltip({ active, payload }) {
+function ChartTooltip({ active, payload, unit }) {
   if (!active || !payload?.length) {
     return null;
   }
@@ -31,13 +32,16 @@ function ChartTooltip({ active, payload }) {
       <p className="max-w-60 break-words font-medium text-foreground">
         {point.label}
       </p>
-      <p className="text-muted-foreground tabular-nums">{formatTonnes(point.value)}</p>
+      <p className="text-muted-foreground tabular-nums">{formatEmissions(point.value, unit)}</p>
     </div>
   );
 }
 
-export function Scope3Hotspots({ categories }) {
-  const data = [...categories].sort((a, b) => b.value - a.value);
+export const Scope3Hotspots = memo(function Scope3Hotspots({ categories, unit }) {
+  const data = useMemo(
+    () => [...categories].sort((a, b) => b.value - a.value),
+    [categories],
+  );
 
   return (
     <div className="h-72 min-w-0 w-full overflow-hidden">
@@ -68,12 +72,12 @@ export function Scope3Hotspots({ categories }) {
             axisLine={false}
             tickLine={false}
           />
-          <Tooltip cursor={{ fill: "rgba(4, 18, 130, 0.06)" }} content={<ChartTooltip />} />
+          <Tooltip cursor={{ fill: "rgba(4, 18, 130, 0.06)" }} content={<ChartTooltip unit={unit} />} />
           <Bar dataKey="value" radius={[0, 8, 8, 0]} barSize={16}>
             {data.map((entry, index) => (
               <Cell
                 key={entry.key}
-                fill={SEQUENTIAL_COLORS[index % SEQUENTIAL_COLORS.length]}
+                fill={entry.color || SEQUENTIAL_COLORS[index % SEQUENTIAL_COLORS.length]}
               />
             ))}
           </Bar>
@@ -81,4 +85,4 @@ export function Scope3Hotspots({ categories }) {
       </ResponsiveContainer>
     </div>
   );
-}
+});

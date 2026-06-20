@@ -15,12 +15,8 @@ const bdoGrotesk = localFont({
 });
 
 export const metadata = {
-  title: "Footprint Mappa · OCF Report Builder",
-  description: "Configurable organisational carbon footprint report builder",
-  icons: {
-    icon: "/brand/logo-gradient.png",
-    apple: "/brand/logo-gradient.png",
-  },
+  title: "Footprint Mappa · Carbon Footprint Report Builder",
+  description: "Configurable OCF and PCF carbon footprint report builder",
 };
 
 export default function RootLayout({ children }) {

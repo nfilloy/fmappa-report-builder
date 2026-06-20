@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -29,9 +29,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { SECTION_PRESETS } from "@/lib/report/sections";
 
-function TileInner({ section, isSelected, dragging, onToggleSection, onSelectSection, onRemoveSection }) {
+const TileInner = memo(function TileInner({ section, isSelected, dragging, onToggleSection, onSelectSection, onRemoveSection }) {
   return (
     <div
       className={`flex min-w-0 items-center gap-3 rounded-xl border p-3 transition-all ${
@@ -85,9 +84,9 @@ function TileInner({ section, isSelected, dragging, onToggleSection, onSelectSec
       ) : null}
     </div>
   );
-}
+});
 
-function SortableSectionTile(props) {
+const SortableSectionTile = memo(function SortableSectionTile(props) {
   const {
     attributes,
     listeners,
@@ -119,9 +118,9 @@ function SortableSectionTile(props) {
       </div>
     </div>
   );
-}
+});
 
-export function SectionControls({
+export const SectionControls = memo(function SectionControls({
   sections,
   onToggleSection,
   onReorderSections,
@@ -131,6 +130,7 @@ export function SectionControls({
   onAddSection,
   onRemoveSection,
   onApplyPreset,
+  presets = {},
   selectedSectionId,
 }) {
   const [activeId, setActiveId] = useState(null);
@@ -142,12 +142,25 @@ export function SectionControls({
     }),
   );
 
-  const enabledCount = sections.filter((section) => section.enabled).length;
-  const selectedSection =
-    sections.find((section) => section.id === selectedSectionId) || sections[0];
-  const activeSection = sections.find((section) => section.id === activeId);
+  const sectionIds = useMemo(
+    () => sections.map((section) => section.id),
+    [sections],
+  );
+  const enabledCount = useMemo(
+    () => sections.filter((section) => section.enabled).length,
+    [sections],
+  );
+  const selectedSection = useMemo(
+    () =>
+      sections.find((section) => section.id === selectedSectionId) || sections[0],
+    [sections, selectedSectionId],
+  );
+  const activeSection = useMemo(
+    () => sections.find((section) => section.id === activeId),
+    [activeId, sections],
+  );
 
-  function handleDragEnd(event) {
+  const handleDragEnd = useCallback((event) => {
     const { active, over } = event;
     setActiveId(null);
 
@@ -163,7 +176,7 @@ export function SectionControls({
     }
 
     onReorderSections(arrayMove(sections, oldIndex, newIndex));
-  }
+  }, [onReorderSections, sections]);
 
   return (
     <Card className="min-w-0">
@@ -190,7 +203,7 @@ export function SectionControls({
             Templates
           </p>
           <div className="mt-2 flex min-w-0 flex-wrap gap-2">
-            {Object.entries(SECTION_PRESETS).map(([presetId, preset]) => (
+            {Object.entries(presets).map(([presetId, preset]) => (
               <Button
                 key={presetId}
                 onClick={() => onApplyPreset(presetId)}
@@ -213,7 +226,7 @@ export function SectionControls({
           onDragEnd={handleDragEnd}
         >
           <SortableContext
-            items={sections.map((section) => section.id)}
+            items={sectionIds}
             strategy={verticalListSortingStrategy}
           >
             <div className="space-y-2">
@@ -295,4 +308,4 @@ export function SectionControls({
       </CardContent>
     </Card>
   );
-}
+});

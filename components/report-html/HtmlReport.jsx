@@ -1,6 +1,14 @@
-import { formatPercent, formatTonnes } from "@/lib/formatters";
+import { memo, useMemo } from "react";
+
+import { formatEmissions, formatPercent } from "@/lib/formatters";
 import { maxByValue, percentageOfMax } from "@/lib/report/chartData";
+import { SEQUENTIAL_COLORS } from "@/lib/report/chartTheme";
 import { enabledSections } from "@/lib/report/sections";
+import {
+  breakdownLegendHtml,
+  donutSvg,
+  stackedBarSvg,
+} from "@/lib/report/svgCharts";
 
 function paragraphs(content) {
   return String(content || "")
@@ -9,116 +17,149 @@ function paragraphs(content) {
     .filter(Boolean);
 }
 
+function shortEntityName(name) {
+  return String(name ?? "").replace("Planta ", "");
+}
+
+// Inline-editable text block: in editable mode the content is contentEditable
+// and commits to the section model on blur; otherwise it is plain markup.
+function Editable({ as: Tag = "div", editable, onCommit, className, title, children }) {
+  if (!editable) {
+    return <Tag className={className}>{children}</Tag>;
+  }
+
+  return (
+    <Tag
+      className={`${className || ""} report-editable`.trim()}
+      contentEditable
+      suppressContentEditableWarning
+      spellCheck={false}
+      title={title}
+      onBlur={(event) => onCommit(event.currentTarget.innerText)}
+    >
+      {children}
+    </Tag>
+  );
+}
+
 function GlobalResults({ report }) {
+  const unit = report.unit;
   return (
     <div className="metric-grid">
       <div className="metric-card">
         <div className="metric-label">Total emissions</div>
-        <div className="metric-value">{formatTonnes(report.total.totalEmissions)}</div>
+        <div className="metric-value">{formatEmissions(report.total.totalEmissions, unit)}</div>
       </div>
-      {report.scopeBreakdown.map((scope) => (
-        <div className="metric-card" key={scope.label}>
-          <div className="metric-label">{scope.label}</div>
-          <div className="metric-value">{formatTonnes(scope.value)}</div>
-          <p>{formatPercent(scope.percentage)}</p>
+      {report.breakdown.map((item) => (
+        <div className="metric-card" key={item.label}>
+          <div className="metric-label">{item.label}</div>
+          <div className="metric-value">{formatEmissions(item.value, unit)}</div>
+          <p>{formatPercent(item.percentage)}</p>
         </div>
       ))}
     </div>
   );
 }
 
-function ScopeBreakdownReport({ report }) {
+const BreakdownReport = memo(function BreakdownReport({ report }) {
+  const html = useMemo(
+    () =>
+      donutSvg({
+        breakdown: report.breakdown,
+        total: report.total.totalEmissions,
+        unit: report.unit,
+      }) + breakdownLegendHtml({ breakdown: report.breakdown, unit: report.unit }),
+    [report],
+  );
+
   return (
-    <div>
-      {report.scopeBreakdown.map((scope) => (
-        <div className="scope-row" key={scope.label}>
-          <div className="scope-row-header">
-            <strong>{scope.label}</strong>
-            <span>
-              {formatTonnes(scope.value)} · {formatPercent(scope.percentage)}
-            </span>
-          </div>
-          <div className="scope-track">
-            <div
-              className="scope-fill"
-              style={{ width: `${Math.min(scope.percentage, 100)}%` }}
-            />
-          </div>
-        </div>
-      ))}
-    </div>
+    <div className="report-chart" dangerouslySetInnerHTML={{ __html: html }} />
   );
-}
+});
 
-function SiteEmissionsReport({ report }) {
-  const maxEmissions = maxByValue(report.sites, "totalEmissions");
+const EntityEmissionsReport = memo(function EntityEmissionsReport({ report }) {
+  const unit = report.unit;
+  const colors = useMemo(() => report.breakdown.map((item) => item.color), [report.breakdown]);
+  const chartHtml = useMemo(
+    () =>
+      stackedBarSvg({
+        entities: report.entities,
+        columns: report.entityColumns,
+        colors,
+        unit,
+      }),
+    [colors, report.entities, report.entityColumns, unit],
+  );
 
   return (
     <>
-      <div className="bar-list">
-        {report.sites.map((site) => (
-          <div className="bar-row" key={site.entity}>
-            <div className="bar-row-header">
-              <strong>{site.entity}</strong>
-              <span>{formatTonnes(site.totalEmissions)}</span>
-            </div>
-            <div className="bar-track">
-              <div
-                className="bar-fill site-fill"
-                style={{
-                  width: `${percentageOfMax(site.totalEmissions, maxEmissions)}%`,
-                }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
+      <div
+        className="stacked-bar-wrap"
+        dangerouslySetInnerHTML={{
+          __html: chartHtml,
+        }}
+      />
       <table className="report-table">
         <thead>
           <tr>
-            <th>Entity</th>
-            <th className="number">Scope 1</th>
-            <th className="number">Scope 2</th>
-            <th className="number">Scope 3</th>
+            <th>
+              {report.entityLabel}
+              {report.showFunctionalUnit ? " & functional unit" : ""}
+            </th>
+            {report.entityColumns.map((column) => (
+              <th className="number" key={column.key}>
+                {column.label}
+              </th>
+            ))}
             <th className="number">Total</th>
           </tr>
         </thead>
         <tbody>
-          {report.sites.map((site) => (
-            <tr key={site.entity}>
-              <td>{site.entity}</td>
-              <td className="number">{formatTonnes(site.scope1)}</td>
-              <td className="number">{formatTonnes(site.scope2)}</td>
-              <td className="number">{formatTonnes(site.scope3)}</td>
-              <td className="number">{formatTonnes(site.totalEmissions)}</td>
+          {report.entities.map((entity) => (
+            <tr key={entity.name}>
+              <td>
+                {entity.name}
+                {report.showFunctionalUnit && entity.meta ? (
+                  <span className="entity-fu">{entity.meta}</span>
+                ) : null}
+              </td>
+              {report.entityColumns.map((column) => (
+                <td className="number" key={column.key}>
+                  {formatEmissions(entity.values[column.key], unit)}
+                </td>
+              ))}
+              <td className="number">{formatEmissions(entity.totalEmissions, unit)}</td>
             </tr>
           ))}
         </tbody>
       </table>
     </>
   );
-}
+});
 
-function TopScope3Report({ report }) {
-  const maxCategoryValue = maxByValue(report.topScope3Categories, "value");
+function TopCategoriesReport({ report }) {
+  const unit = report.unit;
+  const maxCategoryValue = maxByValue(report.topCategories, "value");
 
-  if (report.topScope3Categories.length === 0) {
-    return <p>No recognised Scope 3 category values were available.</p>;
+  if (report.topCategories.length === 0) {
+    return <p>{report.topEmptyText}</p>;
   }
 
   return (
     <div className="bar-list">
-      {report.topScope3Categories.map((category) => (
+      {report.topCategories.map((category, index) => (
         <div className="bar-row" key={category.key}>
           <div className="bar-row-header">
             <strong>{category.label}</strong>
-            <span>{formatTonnes(category.value)}</span>
+            <span>{formatEmissions(category.value, unit)}</span>
           </div>
           <div className="bar-track">
             <div
               className="bar-fill category-fill"
               style={{
                 width: `${percentageOfMax(category.value, maxCategoryValue)}%`,
+                background:
+                  category.color || SEQUENTIAL_COLORS[index % SEQUENTIAL_COLORS.length],
               }}
             />
           </div>
@@ -129,19 +170,22 @@ function TopScope3Report({ report }) {
 }
 
 function CategoryTablesReport({ report }) {
+  const unit = report.unit;
+  const totalLabel = report.categoryTotalLabel || "Total";
+
   return (
     <div>
       {report.categoryBreakdown.map((group) => (
-        <div className="category-group" key={group.scope}>
-          <h3>{group.scope} detailed categories</h3>
+        <div className="category-group" key={group.group}>
+          <h3>{group.group} detailed categories</h3>
           <table className="report-table">
             <thead>
               <tr>
                 <th>Category</th>
-                <th className="number">Total empresa</th>
-                {report.sites.map((site) => (
-                  <th className="number" key={site.entity}>
-                    {site.entity.replace("Planta ", "")}
+                <th className="number">{totalLabel}</th>
+                {group.categories[0].perEntity.map((entity) => (
+                  <th className="number" key={entity.name}>
+                    {shortEntityName(entity.name)}
                   </th>
                 ))}
               </tr>
@@ -150,10 +194,10 @@ function CategoryTablesReport({ report }) {
               {group.categories.map((category) => (
                 <tr key={category.key}>
                   <td>{category.label}</td>
-                  <td className="number">{formatTonnes(category.total)}</td>
-                  {category.sites.map((site) => (
-                    <td className="number" key={site.entity}>
-                      {formatTonnes(site.value)}
+                  <td className="number">{formatEmissions(category.total, unit)}</td>
+                  {category.perEntity.map((entity) => (
+                    <td className="number" key={entity.name}>
+                      {formatEmissions(entity.value, unit)}
                     </td>
                   ))}
                 </tr>
@@ -166,47 +210,82 @@ function CategoryTablesReport({ report }) {
   );
 }
 
-function SectionIntro({ content }) {
-  const items = paragraphs(content);
-
-  if (items.length === 0) {
-    return null;
-  }
-
+function MethodologyBadges({ report }) {
   return (
-    <div className="section-intro">
-      {items.map((paragraph) => (
-        <p key={paragraph}>{paragraph}</p>
+    <div className="method-badges">
+      <span className="method-badge method-badge--accent">{report.standardLong}</span>
+      <span className="method-badge">{report.ghgProtocol}</span>
+      {report.dataSources.map((source) => (
+        <span className="method-badge" key={source}>
+          {source}
+        </span>
       ))}
     </div>
   );
 }
 
-function InsightsReport({ content }) {
-  return (
-    <ul className="insight-list">
-      {paragraphs(content).map((item) => (
-        <li key={item}>{item}</li>
-      ))}
-    </ul>
-  );
-}
+function SectionIntro({ section, editable, onUpdateSection }) {
+  const items = useMemo(() => paragraphs(section.content), [section.content]);
 
-function TextReport({ content }) {
+  if (items.length === 0 && !editable) {
+    return null;
+  }
+
   return (
-    <>
-      {paragraphs(content).map((paragraph) => (
+    <Editable
+      className="section-intro"
+      editable={editable}
+      title="Click to edit"
+      onCommit={(text) => onUpdateSection(section.id, { content: text })}
+    >
+      {items.map((paragraph) => (
         <p key={paragraph}>{paragraph}</p>
       ))}
-    </>
+    </Editable>
   );
 }
 
-function SectionBody({ section, report }) {
+function TextReport({ section, editable, onUpdateSection }) {
+  const items = useMemo(() => paragraphs(section.content), [section.content]);
+
+  return (
+    <Editable
+      editable={editable}
+      title="Click to edit"
+      onCommit={(text) => onUpdateSection(section.id, { content: text })}
+    >
+      {items.map((paragraph) => (
+        <p key={paragraph}>{paragraph}</p>
+      ))}
+    </Editable>
+  );
+}
+
+function InsightsReport({ section, editable, onUpdateSection }) {
+  const items = useMemo(() => paragraphs(section.content), [section.content]);
+
+  return (
+    <Editable
+      as="ul"
+      className="insight-list"
+      editable={editable}
+      title="Click to edit"
+      onCommit={(text) => onUpdateSection(section.id, { content: text })}
+    >
+      {items.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </Editable>
+  );
+}
+
+function SectionBody({ section, report, editable, onUpdateSection }) {
+  const editProps = { editable, onUpdateSection };
+
   if (section.type === "metrics") {
     return (
       <>
-        <SectionIntro content={section.content} />
+        <SectionIntro section={section} {...editProps} />
         <GlobalResults report={report} />
       </>
     );
@@ -215,8 +294,8 @@ function SectionBody({ section, report }) {
   if (section.type === "chart") {
     return (
       <>
-        <SectionIntro content={section.content} />
-        <ScopeBreakdownReport report={report} />
+        <SectionIntro section={section} {...editProps} />
+        <BreakdownReport report={report} />
       </>
     );
   }
@@ -224,8 +303,8 @@ function SectionBody({ section, report }) {
   if (section.type === "table") {
     return (
       <>
-        <SectionIntro content={section.content} />
-        <SiteEmissionsReport report={report} />
+        <SectionIntro section={section} {...editProps} />
+        <EntityEmissionsReport report={report} />
       </>
     );
   }
@@ -233,7 +312,7 @@ function SectionBody({ section, report }) {
   if (section.type === "category-tables") {
     return (
       <>
-        <SectionIntro content={section.content} />
+        <SectionIntro section={section} {...editProps} />
         <CategoryTablesReport report={report} />
       </>
     );
@@ -242,13 +321,18 @@ function SectionBody({ section, report }) {
   if (section.type === "insights") {
     return (
       <>
-        <InsightsReport content={section.content} />
-        <TopScope3Report report={report} />
+        <InsightsReport section={section} {...editProps} />
+        <TopCategoriesReport report={report} />
       </>
     );
   }
 
-  return <TextReport content={section.content} />;
+  return (
+    <>
+      <TextReport section={section} {...editProps} />
+      {section.id === "methodology" ? <MethodologyBadges report={report} /> : null}
+    </>
+  );
 }
 
 function sectionClassName(section) {
@@ -259,27 +343,32 @@ function sectionClassName(section) {
   ].join(" ");
 }
 
-export function HtmlReport({ report, sections, settings }) {
+export const HtmlReport = memo(function HtmlReport({
+  report,
+  sections,
+  settings,
+  editable = false,
+  onUpdateSection,
+}) {
   const clientName = settings?.clientName || report.clientName;
-  const reportLabel =
-    settings?.reportLabel || "Organisational Carbon Footprint Report 2024";
+  const reportLabel = settings?.reportLabel || report.reportTitle;
   const accentColor = settings?.accentColor || "#b91c1c";
   const reportYear = settings?.reportYear || "2024";
   const preparedBy = settings?.preparedBy || "Footprint Mappa";
+  const preparedFor = settings?.preparedFor || "";
+  const reportDate = settings?.reportDate || "";
   const reportingPeriod = settings?.reportingPeriod || "";
+  const subtitle = settings?.subtitle || report.coverSubtitle;
+  const totalSourceLabel = settings?.totalSourceLabel || report.totalSourceLabel;
   const notes = settings?.notes || "";
   const logoDataUrl = settings?.logoDataUrl || "";
-  const visibleSections = enabledSections(sections);
-  const totalSource =
-    report.totalSource === "official"
-      ? "Official Total empresa row"
-      : "Calculated from site rows";
+  const visibleSections = useMemo(() => enabledSections(sections), [sections]);
+  const eyebrow = [`Prepared by ${preparedBy}`];
+  if (preparedFor) eyebrow.push(`Prepared for ${preparedFor}`);
+  if (reportDate) eyebrow.push(reportDate);
 
   return (
-    <article
-      className="report-page"
-      style={{ "--report-accent": accentColor }}
-    >
+    <article className="report-page" style={{ "--report-accent": accentColor }}>
       <header className="report-cover">
         <div className="cover-topline">
           {logoDataUrl ? (
@@ -288,14 +377,26 @@ export function HtmlReport({ report, sections, settings }) {
           ) : (
             <div className="client-wordmark">{clientName}</div>
           )}
-          <div className="report-badge">OCF {reportYear}</div>
+          <div className="report-badge">
+            {report.coverBadge} {reportYear}
+          </div>
         </div>
         <div className="cover-main">
-          <p className="report-eyebrow">Prepared by {preparedBy}</p>
+          <p className="report-eyebrow">{eyebrow.join(" · ")}</p>
           <h1 className="report-title">{reportLabel}</h1>
-          <p className="report-subtitle">
-            Configurable Scope 1, Scope 2 and Scope 3 emissions report generated from the uploaded OCF dataset.
-          </p>
+          <p className="report-subtitle">{subtitle}</p>
+          <div className="cover-headline">
+            <strong>{formatEmissions(report.total.totalEmissions, report.unit)}</strong>
+            <span>total footprint · {reportYear}</span>
+          </div>
+          <div className="cover-standard">
+            <span>{report.standardLong}</span>
+            <span>
+              {report.ghgProtocol.includes("Product")
+                ? "GHG Protocol · Product"
+                : "GHG Protocol · Corporate"}
+            </span>
+          </div>
         </div>
         <div className="cover-summary">
           <div>
@@ -304,7 +405,7 @@ export function HtmlReport({ report, sections, settings }) {
           </div>
           <div>
             <span>Total emissions</span>
-            <strong>{formatTonnes(report.total.totalEmissions)}</strong>
+            <strong>{formatEmissions(report.total.totalEmissions, report.unit)}</strong>
           </div>
           <div>
             <span>{reportingPeriod ? "Reporting period" : "Source file"}</span>
@@ -312,7 +413,7 @@ export function HtmlReport({ report, sections, settings }) {
           </div>
           <div>
             <span>Total source</span>
-            <strong>{totalSource}</strong>
+            <strong>{totalSourceLabel}</strong>
           </div>
         </div>
         {notes ? (
@@ -334,10 +435,24 @@ export function HtmlReport({ report, sections, settings }) {
 
       {visibleSections.map((section) => (
         <section className={sectionClassName(section)} key={section.id}>
-          <h2>{section.title}</h2>
-          <SectionBody section={section} report={report} />
+          <h2>
+            <Editable
+              as="span"
+              editable={editable}
+              title="Click to edit title"
+              onCommit={(text) => onUpdateSection(section.id, { title: text })}
+            >
+              {section.title}
+            </Editable>
+          </h2>
+          <SectionBody
+            section={section}
+            report={report}
+            editable={editable}
+            onUpdateSection={onUpdateSection}
+          />
         </section>
       ))}
     </article>
   );
-}
+});

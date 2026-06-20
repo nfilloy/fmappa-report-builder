@@ -18,14 +18,15 @@ test("builds the OCF model from the provided sample CSV", () => {
   const csv = readFileSync("data/sample_ocf_iso_14064.csv", "utf8");
   const report = buildOcfReport(parseCsv(csv), "sample_ocf_iso_14064.csv");
 
+  assert.equal(report.kind, "ocf");
   assert.equal(report.total.totalEmissions, 5046437.06);
   assert.deepEqual(
-    report.sites.map((site) => site.entity),
+    report.entities.map((entity) => entity.name),
     ["Planta Barcelona", "Planta Valencia", "Planta Sevilla"],
   );
   assert.equal(report.categoryBreakdown.length, 3);
   assert.equal(
-    report.topScope3Categories[0].key,
+    report.topCategories[0].key,
     "scope_3_1_1_raw_materials_or_auxiliary_materials",
   );
 });

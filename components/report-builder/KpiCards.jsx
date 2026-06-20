@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { animate, motion, useReducedMotion } from "framer-motion";
 
 import { Card } from "@/components/ui/card";
-import { formatTonnes } from "@/lib/formatters";
+import { formatNumber } from "@/lib/formatters";
 
-function CountUp({ value }) {
+function CountUp({ value, unit }) {
   const reduceMotion = useReducedMotion();
   const [display, setDisplay] = useState(0);
 
@@ -24,7 +24,18 @@ function CountUp({ value }) {
     return () => controls.stop();
   }, [value, reduceMotion]);
 
-  return <>{formatTonnes(reduceMotion ? value : display)}</>;
+  const shown = reduceMotion ? value : display;
+  const divisor = unit?.divisor || 1;
+  const suffix = unit?.suffix || "tCO2e";
+
+  // Keep the number on a single line (never break mid-figure); the unit can
+  // wrap to its own line and sits a touch smaller for hierarchy.
+  return (
+    <span className="flex flex-wrap items-baseline gap-x-1.5">
+      <span className="whitespace-nowrap">{formatNumber(shown / divisor)}</span>
+      <span className="text-sm font-semibold text-muted-foreground">{suffix}</span>
+    </span>
+  );
 }
 
 const containerVariants = {
@@ -37,7 +48,7 @@ const itemVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
 };
 
-export function KpiCards({ kpis }) {
+export const KpiCards = memo(function KpiCards({ kpis, unit }) {
   return (
     <motion.div
       className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4"
@@ -64,9 +75,9 @@ export function KpiCards({ kpis }) {
                   {kpi.label}
                 </p>
               </div>
-              <p className="mt-4 break-words text-[clamp(1.55rem,1.1rem+1vw,1.875rem)] font-bold leading-tight text-foreground tabular-nums">
-                <CountUp value={kpi.value} />
-              </p>
+              <div className="mt-4 text-[clamp(1.5rem,1.05rem+1vw,1.875rem)] font-bold leading-tight text-foreground tabular-nums">
+                <CountUp value={kpi.value} unit={unit} />
+              </div>
               <p className="mt-2 min-w-0 break-words text-sm text-muted-foreground">
                 {kpi.detail}
               </p>
@@ -76,4 +87,4 @@ export function KpiCards({ kpis }) {
       ))}
     </motion.div>
   );
-}
+});

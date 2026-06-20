@@ -42,9 +42,13 @@ export async function POST(request) {
       },
     });
 
+    const kind = report.kind === "pcf" ? "pcf" : "ocf";
+    const reportYear = settings?.reportYear || "2024";
+    const fileName = `${kind}-report-${reportYear}.pdf`;
+
     return new Response(pdf, {
       headers: {
-        "Content-Disposition": 'attachment; filename="ocf-report-2024.pdf"',
+        "Content-Disposition": `attachment; filename="${fileName}"`,
         "Content-Type": "application/pdf",
       },
     });

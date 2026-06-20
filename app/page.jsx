@@ -1,5 +1,5 @@
-import { OcfReportBuilder } from "@/components/report-builder/OcfReportBuilder";
+import { ReportBuilder } from "@/components/report-builder/ReportBuilder";
 
 export default function Home() {
-  return <OcfReportBuilder />;
+  return <ReportBuilder />;
 }

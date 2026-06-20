@@ -139,7 +139,7 @@ test("report builder stays within the viewport across responsive widths", async 
       const page = await browser.newPage({ viewport });
       await page.goto(baseUrl, { waitUntil: "networkidle" });
       await page
-        .getByLabel(/upload ocf csv file/i)
+        .getByLabel(/upload ocf or pcf csv file/i)
         .setInputFiles(SAMPLE_CSV);
       await page.getByText("HTML report preview").waitFor({ timeout: 15000 });
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));

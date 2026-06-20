@@ -160,19 +160,31 @@
     letter-spacing: -0.02em;
   }
 
-  /* Page backdrop: brand dune image at the top plus a continuous brand-tinted
-     surface underneath, so long pages never fall into an unrelated flat color. */
+  /* Page backdrop: brand dune image plus a brand-tinted surface, rendered in a
+     viewport-fixed layer so it stays put while the page content scrolls over it.
+     A fixed ::before is used instead of background-attachment: fixed, which is
+     unreliable on iOS Safari. */
   .app-dune-bg {
+    position: relative;
+    z-index: 0;
+    background-color: #fff7f1;
+  }
+
+  .app-dune-bg::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
     background-color: #fff7f1;
     background-image:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.38) 0%, rgba(255, 255, 255, 0.74) 28%, rgba(255, 255, 255, 0.92) 54%, rgba(255, 247, 241, 0.98) 76%, #fff7f1 100%),
-      radial-gradient(1200px 560px at 12% 82%, rgba(253, 194, 216, 0.32), transparent 64%),
-      radial-gradient(1000px 520px at 92% 66%, rgba(252, 166, 94, 0.22), transparent 62%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.66) 28%, rgba(255, 247, 241, 0.42) 58%, rgba(255, 247, 241, 0) 100%),
+      radial-gradient(1200px 560px at 12% 82%, rgba(253, 194, 216, 0.28), transparent 64%),
+      radial-gradient(1000px 520px at 92% 66%, rgba(252, 166, 94, 0.2), transparent 62%),
       url("/brand/hero-bg.jpg");
-    background-attachment: scroll, scroll, scroll, scroll;
-    background-position: top center, center top, center top, top center;
+    background-position: top center, center top, center top, bottom center;
     background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
-    background-size: 100% 980px, 100% 100%, 100% 100%, max(1280px, 100%) auto;
+    background-size: 100% 100%, 100% 100%, 100% 100%, cover;
   }
 
   /* Transparent hero band — sits directly over the page dune backdrop. */

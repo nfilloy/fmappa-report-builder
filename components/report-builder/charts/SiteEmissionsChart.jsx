@@ -1,5 +1,6 @@
 "use client";
 
+import { memo, useMemo } from "react";
 import {
   Bar,
   BarChart,
@@ -11,7 +12,7 @@ import {
   YAxis,
 } from "recharts";
 
-import { formatTonnes } from "@/lib/formatters";
+import { formatEmissions } from "@/lib/formatters";
 import { CHART_AXIS, CHART_GRID, SEQUENTIAL_COLORS } from "@/lib/report/chartTheme";
 
 function shortLabel(value) {
@@ -19,7 +20,7 @@ function shortLabel(value) {
   return label.length > 18 ? `${label.slice(0, 17)}...` : label;
 }
 
-function ChartTooltip({ active, payload }) {
+function ChartTooltip({ active, payload, unit }) {
   if (!active || !payload?.length) {
     return null;
   }
@@ -29,18 +30,19 @@ function ChartTooltip({ active, payload }) {
   return (
     <div className="rounded-lg border border-[#e0e4eb] bg-white px-3 py-2 text-xs shadow-md">
       <p className="max-w-60 break-words font-medium text-foreground">
-        {point.entity}
+        {point.name}
       </p>
       <p className="text-muted-foreground tabular-nums">
-        {formatTonnes(point.totalEmissions)}
+        {formatEmissions(point.totalEmissions, unit)}
       </p>
     </div>
   );
 }
 
-export function SiteEmissionsChart({ sites }) {
-  const data = [...sites].sort(
-    (a, b) => b.totalEmissions - a.totalEmissions,
+export const SiteEmissionsChart = memo(function SiteEmissionsChart({ entities, unit }) {
+  const data = useMemo(
+    () => [...entities].sort((a, b) => b.totalEmissions - a.totalEmissions),
+    [entities],
   );
 
   return (
@@ -65,18 +67,18 @@ export function SiteEmissionsChart({ sites }) {
           />
           <YAxis
             type="category"
-            dataKey="entity"
+            dataKey="name"
             width={112}
             tick={{ fill: CHART_AXIS, fontSize: 12 }}
             tickFormatter={shortLabel}
             axisLine={false}
             tickLine={false}
           />
-          <Tooltip cursor={{ fill: "rgba(4, 18, 130, 0.06)" }} content={<ChartTooltip />} />
+          <Tooltip cursor={{ fill: "rgba(4, 18, 130, 0.06)" }} content={<ChartTooltip unit={unit} />} />
           <Bar dataKey="totalEmissions" radius={[0, 8, 8, 0]} barSize={20}>
             {data.map((entry, index) => (
               <Cell
-                key={entry.entity}
+                key={entry.name}
                 fill={SEQUENTIAL_COLORS[index % SEQUENTIAL_COLORS.length]}
               />
             ))}
@@ -85,4 +87,4 @@ export function SiteEmissionsChart({ sites }) {
       </ResponsiveContainer>
     </div>
   );
-}
+});
