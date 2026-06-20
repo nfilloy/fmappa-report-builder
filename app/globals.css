@@ -58,38 +58,51 @@
   --sidebar-ring: #8a93d6;
 }
 
+/*
+  Dark mode keeps the Mappa identity: a deep navy canvas with peach/coral
+  accents, rather than a neutral grey scale. Peach becomes the solid "primary"
+  surface colour so brand pops against the dark navy.
+*/
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #070a1a; /* deep navy-black */
+  --foreground: #eef0f7;
+  --card: #121733; /* navy surface */
+  --card-foreground: #eef0f7;
+  --popover: #121733;
+  --popover-foreground: #eef0f7;
+
+  --primary: #fca65e; /* Mappa peach leads in the dark */
+  --primary-foreground: #0a0e1f;
+
+  --secondary: #1a2142;
+  --secondary-foreground: #eef0f7;
+  --muted: #1a2142;
+  --muted-foreground: #9aa3c4;
+
+  --accent: #33241a; /* warm peach-tinted dark */
+  --accent-foreground: #fcd9b0;
+
+  --destructive: #ff6b75;
+
+  --border: #2a3157;
+  --input: #2a3157;
+  --ring: #8a93d6;
+
+  /* Chart palette: navy is illegible on a dark canvas, so lead with periwinkle */
+  --chart-1: #6f7bff;
+  --chart-2: #fca65e;
+  --chart-3: #ff7983;
+  --chart-4: #fdc2d8;
+  --chart-5: #7d80ff;
+
+  --sidebar: #121733;
+  --sidebar-foreground: #eef0f7;
+  --sidebar-primary: #fca65e;
+  --sidebar-primary-foreground: #0a0e1f;
+  --sidebar-accent: #1a2142;
+  --sidebar-accent-foreground: #eef0f7;
+  --sidebar-border: #2a3157;
+  --sidebar-ring: #8a93d6;
 }
 
 @theme inline {
@@ -181,6 +194,25 @@
       linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.66) 28%, rgba(255, 247, 241, 0.42) 58%, rgba(255, 247, 241, 0) 100%),
       radial-gradient(1200px 560px at 12% 82%, rgba(253, 194, 216, 0.28), transparent 64%),
       radial-gradient(1000px 520px at 92% 66%, rgba(252, 166, 94, 0.2), transparent 62%),
+      url("/brand/hero-bg.jpg");
+    background-position: top center, center top, center top, bottom center;
+    background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
+    background-size: 100% 100%, 100% 100%, 100% 100%, cover;
+  }
+
+  /* In dark mode we keep the same dune photo, but lay a deep navy veil over it
+     plus subtle brand glows so the surface reads as Mappa in dark mode rather
+     than removing the image entirely. */
+  .dark .app-dune-bg {
+    background-color: #070a1a;
+  }
+
+  .dark .app-dune-bg::before {
+    background-color: #070a1a;
+    background-image:
+      linear-gradient(180deg, rgba(7, 10, 26, 0.82) 0%, rgba(7, 10, 26, 0.86) 28%, rgba(7, 10, 26, 0.9) 58%, rgba(7, 10, 26, 0.96) 100%),
+      radial-gradient(1100px 540px at 12% 80%, rgba(111, 123, 255, 0.16), transparent 64%),
+      radial-gradient(1000px 520px at 92% 64%, rgba(252, 166, 94, 0.12), transparent 62%),
       url("/brand/hero-bg.jpg");
     background-position: top center, center top, center top, bottom center;
     background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;

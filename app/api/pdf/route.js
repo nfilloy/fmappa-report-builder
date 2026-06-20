@@ -22,7 +22,7 @@ export async function POST(request) {
       );
     }
 
-    const html = renderHtmlReportDocument({ report, sections, settings });
+    const html = await renderHtmlReportDocument({ report, sections, settings });
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
 

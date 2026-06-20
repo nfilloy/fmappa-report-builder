@@ -22,13 +22,26 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, Eye, EyeOff, GripVertical, Plus, RotateCcw, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  Eye,
+  EyeOff,
+  GripVertical,
+  Plus,
+  RotateCcw,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { SectionActionButtons } from "@/components/report-builder/workflow/SectionActionButtons";
 import { cn } from "@/lib/utils";
 
 const TYPE_LABELS = {
@@ -50,14 +63,14 @@ function sectionTypeLabel(section) {
   return TYPE_LABELS[section.type] || section.type;
 }
 
-const TileInner = memo(function TileInner({ section, index, isSelected, dragging, onToggleSection, onSelectSection, onRemoveSection }) {
+const TileInner = memo(function TileInner({ section, index, isSelected, dragging, onSelectSection }) {
   return (
     <div
       className={`group flex min-w-0 items-center gap-2 rounded-lg border p-2.5 transition-all ${
         isSelected
           ? "border-primary bg-primary/5 shadow-[0_0_0_1px_var(--primary)]"
           : "border-border bg-card hover:border-primary/40 hover:bg-secondary/40"
-      } ${dragging ? "shadow-[0_16px_32px_-12px_rgba(20,22,31,0.45)]" : ""}`}
+      } ${section.enabled ? "" : "opacity-60"} ${dragging ? "shadow-[0_16px_32px_-12px_rgba(20,22,31,0.45)]" : ""}`}
     >
       <span
         aria-hidden="true"
@@ -66,19 +79,6 @@ const TileInner = memo(function TileInner({ section, index, isSelected, dragging
       >
         <GripVertical className="h-4 w-4" />
       </span>
-      <button
-        aria-label={section.enabled ? `Hide ${section.title}` : `Show ${section.title}`}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-secondary hover:text-foreground"
-        onClick={() => onToggleSection(section.id)}
-        onPointerDown={(event) => event.stopPropagation()}
-        type="button"
-      >
-        {section.enabled ? (
-          <Eye aria-hidden="true" className="h-4 w-4" />
-        ) : (
-          <EyeOff aria-hidden="true" className="h-4 w-4" />
-        )}
-      </button>
       <button
         className="min-w-0 flex-1 text-left"
         onClick={() => onSelectSection(section.id)}
@@ -96,19 +96,17 @@ const TileInner = memo(function TileInner({ section, index, isSelected, dragging
           {section.enabled ? "Included" : "Hidden"} · {sectionTypeLabel(section)}
         </span>
       </button>
-      {section.removable ? (
-        <span onPointerDown={(event) => event.stopPropagation()}>
-          <Button
-            aria-label={`Remove ${section.title}`}
-            onClick={() => onRemoveSection(section.id)}
-            size="icon"
-            type="button"
-            variant="ghost"
-          >
-            <Trash2 aria-hidden="true" />
-          </Button>
-        </span>
-      ) : null}
+      <span
+        aria-hidden="true"
+        className={`shrink-0 ${section.enabled ? "text-primary" : "text-muted-foreground"}`}
+        title={section.enabled ? "Included in PDF" : "Hidden from PDF"}
+      >
+        {section.enabled ? (
+          <Eye className="h-4 w-4" />
+        ) : (
+          <EyeOff className="h-4 w-4" />
+        )}
+      </span>
     </div>
   );
 });
@@ -149,12 +147,10 @@ const SortableSectionTile = memo(function SortableSectionTile(props) {
 
 export const SectionList = memo(function SectionList({
   sections,
-  onToggleSection,
   onReorderSections,
   onRestoreSections,
   onSelectSection,
   onAddSection,
-  onRemoveSection,
   onApplyPreset,
   presets = {},
   selectedSectionId,
@@ -215,15 +211,20 @@ export const SectionList = memo(function SectionList({
             {enabledCount} of {sections.length} included in PDF
           </p>
         </div>
-        <Button
-          aria-label="Restore default sections"
-          onClick={onRestoreSections}
-          size="icon"
-          type="button"
-          variant="ghost"
-        >
-          <RotateCcw aria-hidden="true" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              aria-label="Restore default sections"
+              onClick={onRestoreSections}
+              size="icon"
+              type="button"
+              variant="ghost"
+            >
+              <RotateCcw aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Restore default sections</TooltipContent>
+        </Tooltip>
       </div>
 
       <details className="group min-w-0 rounded-lg border border-border bg-secondary/30 p-3">
@@ -267,9 +268,7 @@ export const SectionList = memo(function SectionList({
                 key={section.id}
                 index={index}
                 isSelected={section.id === selectedSection?.id}
-                onRemoveSection={onRemoveSection}
                 onSelectSection={onSelectSection}
-                onToggleSection={onToggleSection}
                 section={section}
               />
             ))}
@@ -281,9 +280,7 @@ export const SectionList = memo(function SectionList({
               <TileInner
                 dragging
                 isSelected={activeSection.id === selectedSection?.id}
-                onRemoveSection={() => {}}
                 onSelectSection={() => {}}
-                onToggleSection={() => {}}
                 section={activeSection}
               />
             </div>
@@ -309,6 +306,10 @@ export const SectionEditor = memo(function SectionEditor({
   sections,
   selectedSectionId,
   onUpdateSection,
+  onDuplicateSection,
+  onMoveSection,
+  onRemoveSection,
+  onToggleSection,
 }) {
   const selectedSection = useMemo(
     () =>
@@ -349,6 +350,15 @@ export const SectionEditor = memo(function SectionEditor({
           {sectionTypeLabel(selectedSection)}
         </Badge>
       </div>
+      <div className="mt-4">
+        <SectionActionButtons
+          onDuplicate={onDuplicateSection}
+          onMove={onMoveSection}
+          onRemove={onRemoveSection}
+          onToggle={onToggleSection}
+          section={selectedSection}
+        />
+      </div>
       <label className="mt-4 block text-sm font-medium text-foreground">
         Title
         <Input
@@ -385,6 +395,10 @@ export const SectionControls = memo(function SectionControls(props) {
       <CardContent className="min-w-0 space-y-4">
         <SectionList {...props} />
         <SectionEditor
+          onDuplicateSection={props.onDuplicateSection}
+          onMoveSection={props.onMoveSection}
+          onRemoveSection={props.onRemoveSection}
+          onToggleSection={props.onToggleSection}
           onUpdateSection={props.onUpdateSection}
           sections={props.sections}
           selectedSectionId={props.selectedSectionId}

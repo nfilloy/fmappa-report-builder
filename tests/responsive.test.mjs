@@ -95,6 +95,12 @@ async function findHorizontalOverflow(page) {
           return false;
         }
 
+        // Toast notifications are a fixed-position overlay portal, not part of
+        // the responsive document flow.
+        if (element.closest("[data-sonner-toaster]")) {
+          return false;
+        }
+
         const leaksViewport =
           rect.left < -1 || rect.right > viewportWidth + 1;
         const leaksOwnBox =

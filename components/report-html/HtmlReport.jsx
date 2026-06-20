@@ -1,5 +1,3 @@
-import { memo, useMemo } from "react";
-
 import { formatEmissions, formatPercent } from "@/lib/formatters";
 import { maxByValue, percentageOfMax } from "@/lib/report/chartData";
 import { SEQUENTIAL_COLORS } from "@/lib/report/chartTheme";
@@ -62,35 +60,28 @@ function GlobalResults({ report }) {
   );
 }
 
-const BreakdownReport = memo(function BreakdownReport({ report }) {
-  const html = useMemo(
-    () =>
-      donutSvg({
-        breakdown: report.breakdown,
-        total: report.total.totalEmissions,
-        unit: report.unit,
-      }) + breakdownLegendHtml({ breakdown: report.breakdown, unit: report.unit }),
-    [report],
-  );
+function BreakdownReport({ report }) {
+  const html =
+    donutSvg({
+      breakdown: report.breakdown,
+      total: report.total.totalEmissions,
+      unit: report.unit,
+    }) + breakdownLegendHtml({ breakdown: report.breakdown, unit: report.unit });
 
   return (
     <div className="report-chart" dangerouslySetInnerHTML={{ __html: html }} />
   );
-});
+}
 
-const EntityEmissionsReport = memo(function EntityEmissionsReport({ report }) {
+function EntityEmissionsReport({ report }) {
   const unit = report.unit;
-  const colors = useMemo(() => report.breakdown.map((item) => item.color), [report.breakdown]);
-  const chartHtml = useMemo(
-    () =>
-      stackedBarSvg({
-        entities: report.entities,
-        columns: report.entityColumns,
-        colors,
-        unit,
-      }),
-    [colors, report.entities, report.entityColumns, unit],
-  );
+  const colors = report.breakdown.map((item) => item.color);
+  const chartHtml = stackedBarSvg({
+    entities: report.entities,
+    columns: report.entityColumns,
+    colors,
+    unit,
+  });
 
   return (
     <>
@@ -136,7 +127,7 @@ const EntityEmissionsReport = memo(function EntityEmissionsReport({ report }) {
       </table>
     </>
   );
-});
+}
 
 function TopCategoriesReport({ report }) {
   const unit = report.unit;
@@ -226,7 +217,7 @@ function MethodologyBadges({ report }) {
 }
 
 function SectionIntro({ section, editable, onUpdateSection }) {
-  const items = useMemo(() => paragraphs(section.content), [section.content]);
+  const items = paragraphs(section.content);
 
   if (items.length === 0 && !editable) {
     return null;
@@ -247,7 +238,7 @@ function SectionIntro({ section, editable, onUpdateSection }) {
 }
 
 function TextReport({ section, editable, onUpdateSection }) {
-  const items = useMemo(() => paragraphs(section.content), [section.content]);
+  const items = paragraphs(section.content);
 
   return (
     <Editable
@@ -263,7 +254,7 @@ function TextReport({ section, editable, onUpdateSection }) {
 }
 
 function InsightsReport({ section, editable, onUpdateSection }) {
-  const items = useMemo(() => paragraphs(section.content), [section.content]);
+  const items = paragraphs(section.content);
 
   return (
     <Editable
@@ -281,7 +272,7 @@ function InsightsReport({ section, editable, onUpdateSection }) {
 }
 
 function NarrativeAnalysisReport({ section, editable, onUpdateSection }) {
-  const items = useMemo(() => paragraphs(section.content), [section.content]);
+  const items = paragraphs(section.content);
 
   return (
     <Editable
@@ -298,7 +289,7 @@ function NarrativeAnalysisReport({ section, editable, onUpdateSection }) {
 }
 
 function RecommendationsReport({ section, editable, onUpdateSection }) {
-  const items = useMemo(() => paragraphs(section.content), [section.content]);
+  const items = paragraphs(section.content);
 
   return (
     <Editable
@@ -388,7 +379,7 @@ function sectionClassName(section) {
   ].join(" ");
 }
 
-export const HtmlReport = memo(function HtmlReport({
+export function HtmlReport({
   report,
   sections,
   settings,
@@ -409,7 +400,7 @@ export const HtmlReport = memo(function HtmlReport({
   const totalSourceLabel = settings?.totalSourceLabel || report.totalSourceLabel;
   const notes = settings?.notes || "";
   const logoDataUrl = settings?.logoDataUrl || "";
-  const visibleSections = useMemo(() => enabledSections(sections), [sections]);
+  const visibleSections = enabledSections(sections);
   const eyebrow = [`Prepared by ${preparedBy}`];
   if (preparedFor) eyebrow.push(`Prepared for ${preparedFor}`);
   if (reportDate) eyebrow.push(reportDate);
@@ -516,4 +507,4 @@ export const HtmlReport = memo(function HtmlReport({
       ))}
     </article>
   );
-});
+}

@@ -1,4 +1,5 @@
 import localFont from "next/font/local";
+import Script from "next/script";
 
 import "./globals.css";
 
@@ -19,10 +20,19 @@ export const metadata = {
   description: "Configurable OCF and PCF carbon footprint report builder",
 };
 
+// Applies the saved (or system-preferred) theme before first paint to avoid a
+// flash of the wrong theme. Runs synchronously in <head>.
+const themeInitScript = `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}}catch(e){}})();`;
+
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={bdoGrotesk.variable}>
-      <body>{children}</body>
+    <html lang="en" className={bdoGrotesk.variable} suppressHydrationWarning>
+      <body>
+        <Script id="theme-init" strategy="beforeInteractive">
+          {themeInitScript}
+        </Script>
+        {children}
+      </body>
     </html>
   );
 }

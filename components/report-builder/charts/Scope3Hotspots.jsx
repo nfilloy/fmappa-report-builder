@@ -28,8 +28,8 @@ function ChartTooltip({ active, payload, unit }) {
   const point = payload[0].payload;
 
   return (
-    <div className="rounded-lg border border-[#e0e4eb] bg-white px-3 py-2 text-xs shadow-md">
-      <p className="max-w-60 break-words font-medium text-foreground">
+    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-md">
+      <p className="max-w-60 break-words font-medium text-popover-foreground">
         {point.label}
       </p>
       <p className="text-muted-foreground tabular-nums">{formatEmissions(point.value, unit)}</p>
@@ -37,18 +37,25 @@ function ChartTooltip({ active, payload, unit }) {
   );
 }
 
+const ROW_HEIGHT = 46;
+
 export const Scope3Hotspots = memo(function Scope3Hotspots({ categories, unit }) {
   const data = useMemo(
     () => [...categories].sort((a, b) => b.value - a.value),
     [categories],
   );
 
+  // Height tracks the number of rows so the bars stay evenly spaced and the
+  // card doesn't end up with a large empty area when there are few categories.
+  const chartHeight = Math.max(data.length * ROW_HEIGHT + 36, 160);
+
   return (
-    <div className="h-72 min-w-0 w-full overflow-hidden">
+    <div className="min-w-0 w-full overflow-hidden" style={{ height: chartHeight }}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           data={data}
           layout="vertical"
+          barCategoryGap="22%"
           margin={{ top: 4, right: 12, bottom: 4, left: 0 }}
         >
           <CartesianGrid
@@ -73,7 +80,7 @@ export const Scope3Hotspots = memo(function Scope3Hotspots({ categories, unit })
             tickLine={false}
           />
           <Tooltip cursor={{ fill: "rgba(4, 18, 130, 0.06)" }} content={<ChartTooltip unit={unit} />} />
-          <Bar dataKey="value" radius={[0, 8, 8, 0]} barSize={16}>
+          <Bar dataKey="value" radius={[0, 8, 8, 0]} maxBarSize={22}>
             {data.map((entry, index) => (
               <Cell
                 key={entry.key}

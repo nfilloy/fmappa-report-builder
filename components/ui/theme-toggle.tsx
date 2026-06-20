@@ -1,6 +1,6 @@
 "use client"
 
-import { KeyboardEvent, useState } from "react"
+import { KeyboardEvent, useEffect, useState } from "react"
 import { Moon, Sun } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -10,15 +10,23 @@ interface ThemeToggleProps {
 }
 
 export function ThemeToggle({ className }: ThemeToggleProps) {
-  const [isDark, setIsDark] = useState(() =>
-    typeof document === "undefined"
-      ? false
-      : document.documentElement.classList.contains("dark")
-  )
+  // Start from a stable value on both server and first client render to avoid a
+  // hydration mismatch; the anti-flash script in the layout already applied the
+  // real theme to <html>, so we sync to it right after mount.
+  const [isDark, setIsDark] = useState(false)
+
+  useEffect(() => {
+    setIsDark(document.documentElement.classList.contains("dark"))
+  }, [])
 
   function toggleTheme() {
     const nextIsDark = !isDark
     document.documentElement.classList.toggle("dark", nextIsDark)
+    try {
+      localStorage.setItem("theme", nextIsDark ? "dark" : "light")
+    } catch {
+      // Ignore storage access errors (private mode, disabled cookies, etc.)
+    }
     setIsDark(nextIsDark)
   }
 

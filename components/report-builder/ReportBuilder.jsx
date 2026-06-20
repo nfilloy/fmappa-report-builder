@@ -1,12 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
+import { toast } from "sonner";
 import {
-  AlertCircle,
-  Download,
-  Info,
   Leaf,
   Loader2,
   Maximize2,
@@ -18,18 +16,21 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProgressiveFluxLoader } from "@/components/ui/progressive-flux-loader";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { Toaster } from "@/components/ui/sonner";
 import { Tabs } from "@/components/ui/tabs";
-import { Typewriter } from "@/components/ui/typewriter-text";
-import { FileUpload } from "@/components/report-builder/FileUpload";
-import { KpiCards } from "@/components/report-builder/KpiCards";
-import { ReportSettingsPanel } from "@/components/report-builder/ReportSettingsPanel";
 import {
-  SectionEditor,
-  SectionList,
-} from "@/components/report-builder/SectionControls";
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Typewriter } from "@/components/ui/typewriter-text";
+import { KpiCards } from "@/components/report-builder/KpiCards";
 import { ScopeDonut } from "@/components/report-builder/charts/ScopeDonut";
 import { SiteEmissionsTable } from "@/components/report-builder/SiteEmissionsTable";
 import { TopCategories } from "@/components/report-builder/TopCategories";
+import { ReportTopBar } from "@/components/report-builder/workflow/ReportTopBar";
+import { WorkflowPanel } from "@/components/report-builder/workflow/WorkflowPanel";
 import { HtmlReport } from "@/components/report-html/HtmlReport";
 import { buildReport } from "@/lib/data/detectReportType";
 import { parseCsv } from "@/lib/data/parseCsv";
@@ -47,6 +48,7 @@ import {
   createCustomSection,
   getSectionPresets,
   removeSection,
+  reorderSection,
   updateSection,
 } from "@/lib/report/sections";
 
@@ -115,13 +117,16 @@ export function ReportBuilder() {
     notes: "",
     logoDataUrl: "",
   });
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [view, setView] = useState("document");
   const [previewWidth, setPreviewWidth] = useState(0);
   const [pageCount, setPageCount] = useState(1);
+  // After an explicit section selection we programmatically smooth-scroll the
+  // preview. The scroll-spy must not clobber that selection mid-animation, so
+  // we mute it until this timestamp.
+  const spyMutedUntil = useRef(0);
   // The scrollable preview viewport, stored in state via a callback ref so the
   // scroll-spy effect re-runs once the element actually mounts: it lives behind an
   // AnimatePresence transition and is not present on the first commit, so a plain
@@ -141,10 +146,19 @@ export function ReportBuilder() {
       clientName: nextReport.clientName,
       reportLabel: nextReport.reportTitle,
     }));
+
+    toast.success(`Loaded ${fileName}`, {
+      description: `${nextReport.reportTitle} · ${nextSections.length} sections ready to configure.`,
+    });
+
+    if (nextReport.kind === "ocf" && nextReport.totalSource === "calculated") {
+      toast.info("No Total empresa row found", {
+        description: "Company totals were calculated from the site rows.",
+      });
+    }
   }, []);
 
   const resetReportState = useCallback(() => {
-    setError("");
     setReport(null);
     setSections([]);
     setSelectedSectionId("");
@@ -159,7 +173,7 @@ export function ReportBuilder() {
     }
 
     if (!file.name.toLowerCase().endsWith(".csv")) {
-      setError("Please upload a .csv file.");
+      toast.error("Please upload a .csv file.");
       return;
     }
 
@@ -169,7 +183,9 @@ export function ReportBuilder() {
       const text = await file.text();
       ingestCsv(text, file.name);
     } catch (nextError) {
-      setError(nextError.message || "The CSV could not be parsed.");
+      toast.error("The CSV could not be parsed.", {
+        description: nextError.message,
+      });
     } finally {
       setLoading(false);
     }
@@ -192,7 +208,9 @@ export function ReportBuilder() {
       const text = await response.text();
       ingestCsv(text, sampleName);
     } catch (nextError) {
-      setError(nextError.message || "The sample CSV could not be loaded.");
+      toast.error("The sample CSV could not be loaded.", {
+        description: nextError.message,
+      });
     } finally {
       setLoading(false);
     }
@@ -212,7 +230,6 @@ export function ReportBuilder() {
       return;
     }
 
-    setError("");
     setPdfLoading(true);
 
     try {
@@ -229,13 +246,17 @@ export function ReportBuilder() {
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
+      const fileName = `${report.kind}-report-${settings.reportYear || "2024"}.pdf`;
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${report.kind}-report-${settings.reportYear || "2024"}.pdf`;
+      link.download = fileName;
       link.click();
       URL.revokeObjectURL(url);
+      toast.success("PDF downloaded", { description: fileName });
     } catch (nextError) {
-      setError(nextError.message || "The PDF could not be generated.");
+      toast.error("The PDF could not be generated.", {
+        description: nextError.message,
+      });
     } finally {
       setPdfLoading(false);
     }
@@ -265,6 +286,36 @@ export function ReportBuilder() {
       setView("document");
       return [...currentSections, newSection];
     });
+  }, []);
+
+  const handleDuplicateSection = useCallback((sectionId) => {
+    setSections((currentSections) => {
+      const source = currentSections.find((section) => section.id === sectionId);
+
+      if (!source) {
+        return currentSections;
+      }
+
+      const duplicate = {
+        ...source,
+        id: `custom-${Date.now()}`,
+        title: `${source.title} copy`,
+        removable: true,
+      };
+      const sourceIndex = currentSections.findIndex(
+        (section) => section.id === sectionId,
+      );
+      const nextSections = [...currentSections];
+      nextSections.splice(sourceIndex + 1, 0, duplicate);
+      setSelectedSectionId(duplicate.id);
+      return nextSections;
+    });
+  }, []);
+
+  const handleMoveSection = useCallback((sectionId, direction) => {
+    setSections((currentSections) =>
+      reorderSection(currentSections, sectionId, direction),
+    );
   }, []);
 
   const handleRemoveSection = useCallback((sectionId) => {
@@ -317,6 +368,7 @@ export function ReportBuilder() {
         previewEl.getBoundingClientRect().top +
         previewEl.scrollTop -
         12;
+      spyMutedUntil.current = Date.now() + 900;
       previewEl.scrollTo({ top, behavior: "smooth" });
     },
     [previewEl],
@@ -360,6 +412,10 @@ export function ReportBuilder() {
       }
       frame = requestAnimationFrame(() => {
         frame = 0;
+        // Don't override an explicit selection while its smooth-scroll runs.
+        if (Date.now() < spyMutedUntil.current) {
+          return;
+        }
         const containerTop = container.getBoundingClientRect().top;
         let current = "";
         container.querySelectorAll("[data-section-id]").forEach((element) => {
@@ -433,15 +489,19 @@ export function ReportBuilder() {
   }, [previewWidth, zoom]);
 
   const tableTitle = report?.kind === "pcf" ? "Product emissions" : "Site emissions";
-  const calculatedNotice =
-    report?.kind === "ocf" && report.totalSource === "calculated";
+  const enabledSectionCount = useMemo(
+    () => sections.filter((section) => section.enabled).length,
+    [sections],
+  );
   const sectionPresets = useMemo(
     () => (report ? getSectionPresets(report.kind) : {}),
     [report],
   );
 
   return (
-    <main className="app-dune-bg min-h-screen overflow-x-clip text-foreground">
+    <TooltipProvider delayDuration={200}>
+      <Toaster />
+      <main className="app-dune-bg min-h-screen overflow-x-clip text-foreground">
       <section
         className={cn(
           "mx-auto w-full max-w-6xl px-4 sm:px-8",
@@ -459,14 +519,24 @@ export function ReportBuilder() {
           )}
         >
           <div className="flex items-center justify-between gap-4">
-            <Image
-              src="/brand/logo-gradient.png"
-              alt="Footprint Mappa"
-              width={107}
-              height={38}
-              priority
-              className="h-9 max-w-full object-contain"
-            />
+            <div className="min-w-0">
+              <Image
+                src="/brand/logo-gradient.png"
+                alt="Footprint Mappa"
+                width={107}
+                height={38}
+                priority
+                className="h-9 max-w-full object-contain dark:hidden"
+              />
+              <Image
+                src="/brand/logo-white.png"
+                alt="Footprint Mappa"
+                width={107}
+                height={38}
+                priority
+                className="hidden h-9 max-w-full object-contain dark:block"
+              />
+            </div>
             <ThemeToggle className="shrink-0" />
           </div>
           <div className="flex min-w-0 flex-col gap-6 md:flex-row md:items-end md:justify-between">
@@ -514,6 +584,15 @@ export function ReportBuilder() {
           </AnimatePresence>
         </div>
 
+        <ReportTopBar
+          enabledCount={enabledSectionCount}
+          onDownload={handleDownloadPdf}
+          pdfLoading={pdfLoading}
+          report={report}
+          settings={settings}
+          totalSections={sections.length}
+        />
+
         <div
           className={cn(
             "grid min-w-0 gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]",
@@ -528,80 +607,34 @@ export function ReportBuilder() {
               report ? null : "lg:flex lg:h-full lg:flex-col lg:gap-4 lg:space-y-0",
             )}
           >
-            <FileUpload
+            <WorkflowPanel
+              enabledSectionCount={enabledSectionCount}
+              kpis={kpis}
+              onAddSection={handleAddSection}
+              onApplyPreset={handleApplyPreset}
+              onDuplicateSection={handleDuplicateSection}
               onFileSelected={handleFileSelected}
               onLoadSampleOcf={handleLoadSampleOcf}
               onLoadSamplePcf={handleLoadSamplePcf}
-              fileName={report?.fileName}
-              compact={Boolean(report)}
-              fill={!report}
+              onMoveSection={handleMoveSection}
+              onRemoveSection={handleRemoveSection}
+              onReorderSections={handleReorderSections}
+              onRestoreSections={handleRestoreSections}
+              onSelectSection={handleSelectSection}
+              onToggleSection={handleToggleSection}
+              onUpdateSection={handleUpdateSection}
+              presets={sectionPresets}
+              report={report}
+              sections={sections}
+              selectedSectionId={selectedSectionId}
+              settings={settings}
+              setSettings={setSettings}
             />
             {loading ? (
               <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
                 <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
                 Parsing CSV
               </div>
-            ) : null}
-            {error ? (
-              <div className="flex gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm leading-6 text-destructive">
-                <AlertCircle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
-                {error}
-              </div>
-            ) : null}
-            {calculatedNotice ? (
-              <div className="flex gap-3 rounded-xl border border-mappa-peach/40 bg-accent/60 p-4 text-sm leading-6 text-accent-foreground">
-                <Info aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
-                No Total empresa row was found. Totals are calculated from site rows.
-              </div>
-            ) : null}
-            {report ? (
-              <Card className="sticky top-4 min-w-0 overflow-hidden">
-                <CardHeader className="gap-2 border-b border-border/70 pb-4">
-                  <div className="min-w-0">
-                    <CardTitle>Report editor</CardTitle>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Select a section, edit it here, and watch the document update.
-                    </p>
-                  </div>
-                </CardHeader>
-                <CardContent className="min-h-0 min-w-0 space-y-4 p-4">
-                  <SectionList
-                    onAddSection={handleAddSection}
-                    onApplyPreset={handleApplyPreset}
-                    onRemoveSection={handleRemoveSection}
-                    onReorderSections={handleReorderSections}
-                    onRestoreSections={handleRestoreSections}
-                    onSelectSection={handleSelectSection}
-                    onToggleSection={handleToggleSection}
-                    presets={sectionPresets}
-                    sections={sections}
-                    selectedSectionId={selectedSectionId}
-                  />
-                  <SectionEditor
-                    onUpdateSection={handleUpdateSection}
-                    sections={sections}
-                    selectedSectionId={selectedSectionId}
-                  />
-                  <details className="group rounded-xl border border-border bg-secondary/30 p-4">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-foreground">
-                      Report settings and branding
-                      <span className="text-xs font-medium text-muted-foreground group-open:hidden">
-                        Open
-                      </span>
-                      <span className="hidden text-xs font-medium text-muted-foreground group-open:inline">
-                        Close
-                      </span>
-                    </summary>
-                    <div className="mt-4">
-                    <ReportSettingsPanel
-                      framed={false}
-                      onChange={setSettings}
-                      settings={settings}
-                    />
-                    </div>
-                  </details>
-                </CardContent>
-              </Card>
             ) : null}
           </aside>
 
@@ -642,56 +675,56 @@ export function ReportBuilder() {
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
                         {view === "document" ? (
                           <div className="flex shrink-0 items-center gap-1 rounded-lg border border-border bg-card p-1">
-                            <Button
-                              aria-label="Zoom out"
-                              disabled={zoom <= 0.5}
-                              onClick={zoomOut}
-                              size="icon"
-                              type="button"
-                              variant="ghost"
-                            >
-                              <ZoomOut aria-hidden="true" />
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  aria-label="Zoom out"
+                                  disabled={zoom <= 0.5}
+                                  onClick={zoomOut}
+                                  size="icon"
+                                  type="button"
+                                  variant="ghost"
+                                >
+                                  <ZoomOut aria-hidden="true" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Zoom out</TooltipContent>
+                            </Tooltip>
                             <span className="w-10 text-center text-xs font-medium tabular-nums text-muted-foreground">
                               {Math.round(effectiveZoom * 100)}%
                             </span>
-                            <Button
-                              aria-label="Zoom in"
-                              disabled={zoom >= 1.5}
-                              onClick={zoomIn}
-                              size="icon"
-                              type="button"
-                              variant="ghost"
-                            >
-                              <ZoomIn aria-hidden="true" />
-                            </Button>
-                            <Button
-                              aria-label="Reset zoom"
-                              disabled={zoom === 1}
-                              onClick={zoomReset}
-                              size="icon"
-                              type="button"
-                              variant="ghost"
-                            >
-                              <Maximize2 aria-hidden="true" />
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  aria-label="Zoom in"
+                                  disabled={zoom >= 1.5}
+                                  onClick={zoomIn}
+                                  size="icon"
+                                  type="button"
+                                  variant="ghost"
+                                >
+                                  <ZoomIn aria-hidden="true" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Zoom in</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  aria-label="Reset zoom"
+                                  disabled={zoom === 1}
+                                  onClick={zoomReset}
+                                  size="icon"
+                                  type="button"
+                                  variant="ghost"
+                                >
+                                  <Maximize2 aria-hidden="true" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Reset zoom</TooltipContent>
+                            </Tooltip>
                           </div>
                         ) : null}
-                        <Button
-                          className="w-full sm:w-auto"
-                          disabled={pdfLoading}
-                          onClick={handleDownloadPdf}
-                          size="sm"
-                          type="button"
-                          variant="gradient"
-                        >
-                          {pdfLoading ? (
-                            <Loader2 aria-hidden="true" className="animate-spin" />
-                          ) : (
-                            <Download aria-hidden="true" />
-                          )}
-                          {pdfLoading ? "Generating" : "Download PDF"}
-                        </Button>
                       </div>
                     </div>
                   </CardHeader>
@@ -700,7 +733,7 @@ export function ReportBuilder() {
                     <CardContent className="bg-secondary/30 p-4 sm:p-5">
                       <div className="min-w-0 space-y-6">
                         <KpiCards kpis={kpis} unit={report.unit} />
-                        <div className="grid min-w-0 gap-6 xl:grid-cols-2">
+                        <div className="grid min-w-0 items-start gap-6 xl:grid-cols-2">
                           <ScopeDonut
                             breakdown={report.breakdown}
                             total={report.total.totalEmissions}
@@ -815,6 +848,7 @@ export function ReportBuilder() {
           </AnimatePresence>
         </div>
       </section>
-    </main>
+      </main>
+    </TooltipProvider>
   );
 }
