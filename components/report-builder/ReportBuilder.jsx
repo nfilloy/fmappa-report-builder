@@ -37,7 +37,7 @@ import { parseCsv } from "@/lib/data/parseCsv";
 import { formatPercent } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import { BRAND } from "@/lib/report/chartTheme";
-import { buildBrandTheme } from "@/lib/report/brandTheme";
+import { buildBrandTheme, RELATS_RED } from "@/lib/report/brandTheme";
 import {
   HTML_REPORT_PREVIEW_STYLES,
   HTML_REPORT_STYLES,
@@ -84,7 +84,7 @@ function buildKpis(report, accent) {
 
   return [
     {
-      label: "Total emissions",
+      label: report.totalMetricLabel || "Total emissions",
       value: report.total.totalEmissions,
       detail: report.totalSourceLabel,
       color: accent || BRAND.navy,
@@ -105,8 +105,10 @@ export function ReportBuilder() {
   const [settings, setSettings] = useState({
     clientName: "RELATS S.A.U.",
     reportLabel: "Organisational Carbon Footprint Report 2024",
-    accentColor: BRAND.navy,
-    accentSource: "mappa",
+    // The report is client-branded for Relats: default the accent to Relats'
+    // corporate red. Uploading a client logo re-derives the accent from it.
+    accentColor: RELATS_RED,
+    accentSource: "brand",
     reportYear: "2024",
     preparedBy: "Footprint Mappa",
     preparedFor: "",

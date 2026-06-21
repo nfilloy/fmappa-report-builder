@@ -8,15 +8,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { BRAND } from "@/lib/report/chartTheme";
+import { RELATS_RED } from "@/lib/report/brandTheme";
 import { extractPalette } from "@/lib/color/extractPalette";
 import { ensureReadable } from "@/lib/color/contrast";
 
 const ACCENT_PRESETS = [
+  { label: "Relats red", value: RELATS_RED },
   { label: "Mappa navy", value: BRAND.navy },
   { label: "Mappa teal", value: BRAND.teal },
   { label: "Mappa coral", value: BRAND.coral },
   { label: "Mappa peach", value: BRAND.peach },
-  { label: "Relats red", value: "#b91c1c" },
   { label: "Graphite", value: "#18181b" },
 ];
 
@@ -266,8 +267,8 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({
                     onChange({
                       ...settings,
                       logoDataUrl: "",
-                      accentColor: BRAND.navy,
-                      accentSource: "mappa",
+                      accentColor: RELATS_RED,
+                      accentSource: "brand",
                     });
                     bumpColorVersion();
                   }}

@@ -46,7 +46,7 @@ function GlobalResults({ report }) {
   return (
     <div className="metric-grid">
       <div className="metric-card">
-        <div className="metric-label">Total emissions</div>
+        <div className="metric-label">{report.totalMetricLabel || "Total emissions"}</div>
         <div className="metric-value">{formatEmissions(report.total.totalEmissions, unit)}</div>
       </div>
       {report.breakdown.map((item) => (
@@ -69,7 +69,47 @@ function BreakdownReport({ report }) {
     }) + breakdownLegendHtml({ breakdown: report.breakdown, unit: report.unit });
 
   return (
-    <div className="report-chart" dangerouslySetInnerHTML={{ __html: html }} />
+    <>
+      <div className="report-chart" dangerouslySetInnerHTML={{ __html: html }} />
+      <ExcludedStagesReport report={report} />
+    </>
+  );
+}
+
+// Out-of-boundary stages (cradle-to-gate). Only renders when the report carries
+// excluded stages (PCF); for OCF this is a no-op.
+function ExcludedStagesReport({ report }) {
+  const stages = report.excludedStages?.filter((stage) => stage.value > 0);
+
+  if (!stages || stages.length === 0) {
+    return null;
+  }
+
+  const unit = report.unit;
+
+  return (
+    <div className="excluded-stages">
+      <h3>Excluded from system boundary (out of boundary)</h3>
+      <p className="excluded-stages__note">{report.excludedStagesNote}</p>
+      <table className="report-table report-table--muted">
+        <thead>
+          <tr>
+            <th>Downstream stage</th>
+            <th className="number">Emissions (reference)</th>
+            <th className="number">Share of cradle-to-grave</th>
+          </tr>
+        </thead>
+        <tbody>
+          {stages.map((stage) => (
+            <tr key={stage.label}>
+              <td>{stage.label}</td>
+              <td className="number">{formatEmissions(stage.value, unit)}</td>
+              <td className="number">{formatPercent(stage.percentage)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -291,16 +331,28 @@ function NarrativeAnalysisReport({ section, editable, onUpdateSection }) {
 function RecommendationsReport({ section, editable, onUpdateSection }) {
   const items = paragraphs(section.content);
 
+  // In the static PDF markup the number is a real element (selectable, in
+  // document order); in the editable preview it stays a CSS counter so editing
+  // the text never captures the number. See `.recommendation-list` styles.
   return (
     <Editable
       as="ol"
-      className="recommendation-list"
+      className={`recommendation-list${editable ? "" : " recommendation-list--static"}`}
       editable={editable}
       title="Click to edit"
       onCommit={(text) => onUpdateSection(section.id, { content: text })}
     >
       {items.map((item, index) => (
-        <li key={`${item}-${index}`}>{item}</li>
+        <li key={`${item}-${index}`}>
+          {editable ? (
+            item
+          ) : (
+            <>
+              <span className="rec-num">{index + 1}</span>
+              <span className="rec-text">{item}</span>
+            </>
+          )}
+        </li>
       ))}
     </Editable>
   );
@@ -427,8 +479,23 @@ export function HtmlReport({
           <h1 className="report-title">{reportLabel}</h1>
           <p className="report-subtitle">{subtitle}</p>
           <div className="cover-headline">
-            <strong>{formatEmissions(report.total.totalEmissions, report.unit)}</strong>
-            <span>total footprint · {reportYear}</span>
+            {report.coverHeadline ? (
+              <>
+                <strong className="cover-headline--text">{report.coverHeadline}</strong>
+                <span>
+                  {report.coverHeadlineNote} · combined{" "}
+                  <span className="cover-headline-figure">
+                    {formatEmissions(report.total.totalEmissions, report.unit)}
+                  </span>{" "}
+                  · {reportYear}
+                </span>
+              </>
+            ) : (
+              <>
+                <strong>{formatEmissions(report.total.totalEmissions, report.unit)}</strong>
+                <span>{report.coverTotalLabel || "total footprint"} · {reportYear}</span>
+              </>
+            )}
           </div>
           <div className="cover-standard">
             <span>{report.standardLong}</span>
@@ -445,7 +512,7 @@ export function HtmlReport({
             <strong>{clientName}</strong>
           </div>
           <div>
-            <span>Total emissions</span>
+            <span>{report.totalMetricLabel || "Total emissions"}</span>
             <strong>{formatEmissions(report.total.totalEmissions, report.unit)}</strong>
           </div>
           <div>

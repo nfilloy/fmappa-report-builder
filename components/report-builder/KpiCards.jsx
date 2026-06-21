@@ -26,7 +26,7 @@ function CountUp({ value, unit }) {
 
   const shown = reduceMotion ? value : display;
   const divisor = unit?.divisor || 1;
-  const suffix = unit?.suffix || "tCO2e";
+  const suffix = unit?.suffix || "tCO₂e";
 
   // Keep the number on a single line (never break mid-figure); the unit can
   // wrap to its own line and sits a touch smaller for hierarchy.

@@ -7,26 +7,42 @@ import { buildReport, detectReportType } from "../lib/data/detectReportType.js";
 import { parseCsv } from "../lib/data/parseCsv.js";
 import { buildReportSections } from "../lib/report/sections.js";
 
-test("builds the PCF model from the provided sample CSV", () => {
+test("builds the PCF model from the provided sample CSV (cradle-to-gate)", () => {
   const csv = readFileSync("data/sample_pcf_iso_14067.csv", "utf8");
   const report = buildPcfReport(parseCsv(csv), "sample_pcf_iso_14067.csv");
 
   assert.equal(report.kind, "pcf");
+  assert.equal(report.boundaryBasis, "cradle-to-gate");
   assert.equal(report.entities.length, 6);
   assert.equal(report.entities[0].name, "Botella PET 500ml");
-  assert.ok(Math.abs(report.total.totalEmissions - 573.045) < 1e-6);
-  assert.equal(report.breakdown.length, 6);
-  assert.equal(report.entityColumns.length, 6);
+  // Reported total is the in-boundary (materials + manufacturing + transport)
+  // sum, not the CSV's cradle-to-grave total_emissions (573.045).
+  assert.ok(Math.abs(report.total.totalEmissions - 298.818) < 1e-3);
+  assert.ok(Math.abs(report.cradleToGraveTotal - 573.045) < 1e-3);
+
+  // Only the three in-boundary stages drive the breakdown.
+  assert.equal(report.breakdown.length, 3);
+  assert.equal(report.entityColumns.length, 3);
   assert.deepEqual(
     report.breakdown.map((item) => item.label),
-    ["Materials", "Manufacturing", "Transport", "Distribution", "Use", "End of life"],
+    ["Materials", "Manufacturing", "Transport"],
   );
-  // Lifecycle percentages sum to ~100%.
+  // In-boundary percentages sum to ~100%.
   const totalPercentage = report.breakdown.reduce(
     (sum, item) => sum + item.percentage,
     0,
   );
   assert.ok(Math.abs(totalPercentage - 100) < 1e-6);
+
+  // Downstream stages are reported out of boundary, not in the footprint.
+  assert.deepEqual(
+    report.excludedStages.map((stage) => stage.label),
+    ["Distribution", "Use", "End of life"],
+  );
+  assert.ok(report.excludedTotal > 0);
+  // No excluded stage leaks into the hotspots.
+  const hotspotKeys = report.topCategories.map((category) => category.key);
+  assert.ok(!hotspotKeys.some((key) => /^(4_|5_|6_)/.test(key)));
 });
 
 test("rejects CSV files missing the required PCF columns", () => {
