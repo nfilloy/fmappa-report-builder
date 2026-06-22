@@ -66,7 +66,7 @@ function sectionTypeLabel(section) {
 const TileInner = memo(function TileInner({ section, index, isSelected, dragging, onSelectSection }) {
   return (
     <div
-      className={`group flex min-w-0 items-center gap-2 rounded-lg border p-2.5 transition-all ${
+      className={`group mappa-lift flex min-w-0 items-center gap-2 rounded-lg border p-2.5 ${
         isSelected
           ? "border-primary bg-primary/5 shadow-[0_0_0_1px_var(--primary)]"
           : "border-border bg-card hover:border-primary/40 hover:bg-secondary/40"
@@ -359,7 +359,7 @@ export const SectionEditor = memo(function SectionEditor({
           section={selectedSection}
         />
       </div>
-      <label className="mt-4 block text-sm font-medium text-foreground">
+      <label className="mt-5 block text-sm font-medium text-foreground">
         Title
         <Input
           className="mt-2"
@@ -369,7 +369,7 @@ export const SectionEditor = memo(function SectionEditor({
           value={selectedSection.title}
         />
       </label>
-      <label className="mt-4 block text-sm font-medium text-foreground">
+      <label className="mt-5 block text-sm font-medium text-foreground">
         Section copy
         <Textarea
           className="mt-2 min-h-56 resize-y"

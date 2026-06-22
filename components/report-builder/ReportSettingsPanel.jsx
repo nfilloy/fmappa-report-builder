@@ -1,16 +1,23 @@
 "use client";
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { ImagePlus, RefreshCw, X } from "lucide-react";
+import { Check, ImagePlus, Layers, Palette, RefreshCw, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import { BRAND } from "@/lib/report/chartTheme";
 import { RELATS_RED } from "@/lib/report/brandTheme";
 import { extractPalette } from "@/lib/color/extractPalette";
 import { ensureReadable } from "@/lib/color/contrast";
+
+// PCF-only system boundary options. cradle-to-gate is the default.
+const BOUNDARY_OPTIONS = [
+  { label: "Cradle-to-gate", value: "cradle-to-gate" },
+  { label: "Cradle-to-grave", value: "cradle-to-grave" },
+];
 
 const ACCENT_PRESETS = [
   { label: "Relats red", value: RELATS_RED },
@@ -31,8 +38,12 @@ function normalizeHex(value) {
 export const ReportSettingsPanel = memo(function ReportSettingsPanel({
   settings,
   onChange,
+  report,
+  boundary,
+  onBoundaryChange,
   framed = true,
 }) {
+  const isPcf = report?.kind === "pcf";
   const logoInputRef = useRef(null);
   // Native colour inputs are uncontrolled (defaultValue) to avoid a feedback
   // loop where writing `value` back into an open picker re-fires onChange. This
@@ -133,6 +144,45 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({
 
   const fields = (
     <div className="space-y-4">
+        {isPcf ? (
+          <div className="rounded-xl border border-border bg-secondary/40 p-4">
+            <div className="flex items-center gap-2.5">
+              <span className="mappa-gradient-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white shadow-sm">
+                <Layers aria-hidden="true" className="h-4 w-4" />
+              </span>
+              <p className="text-sm font-semibold text-foreground">System boundary</p>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              PCF reporting boundary. Changing it recomputes the footprint and
+              regenerates the report section copy.
+            </p>
+            <div
+              aria-label="System boundary"
+              className="mt-3 grid grid-cols-2 gap-2"
+              role="group"
+            >
+              {BOUNDARY_OPTIONS.map((option) => {
+                const isActive = boundary === option.value;
+                return (
+                  <button
+                    aria-pressed={isActive}
+                    className={cn(
+                      "rounded-lg border px-3 py-2 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                      isActive
+                        ? "border-transparent bg-primary text-primary-foreground"
+                        : "border-border bg-card text-muted-foreground hover:text-foreground",
+                    )}
+                    key={option.value}
+                    onClick={() => onBoundaryChange?.(option.value)}
+                    type="button"
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
         <label className="block text-sm font-medium text-foreground">
           Client name
           <Input
@@ -227,8 +277,13 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({
         </label>
 
         <div className="rounded-xl border border-border bg-secondary/40 p-4">
-          <p className="text-sm font-semibold text-foreground">Client logo</p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2.5">
+            <span className="mappa-gradient-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white shadow-sm">
+              <ImagePlus aria-hidden="true" className="h-4 w-4" />
+            </span>
+            <p className="text-sm font-semibold text-foreground">Client logo</p>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
             Embedded on the report cover. Uploading a logo also derives the
             report accent colour from it; remove it to fall back to Mappa.
           </p>
@@ -263,6 +318,7 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({
                 </Button>
                 <Button
                   aria-label="Remove logo"
+                  className="hover:bg-destructive/10 hover:text-destructive"
                   onClick={() => {
                     onChange({
                       ...settings,
@@ -291,15 +347,20 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({
         </div>
 
         <div className="rounded-xl border border-border bg-secondary/40 p-4">
-          <p className="text-sm font-semibold text-foreground">Accent color</p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2.5">
+            <span className="mappa-gradient-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white shadow-sm">
+              <Palette aria-hidden="true" className="h-4 w-4" />
+            </span>
+            <p className="text-sm font-semibold text-foreground">Accent color</p>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
             Brand accent of the exported report (cover, headings, badges). Charts
             keep the fixed Mappa palette. Derived from the logo when one is set.
           </p>
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-card p-1.5">
             <input
               aria-label="Pick accent colour"
-              className="h-9 w-12 shrink-0 cursor-pointer rounded-md border border-border bg-card p-1"
+              className="h-8 w-10 shrink-0 cursor-pointer rounded-md border border-border bg-card p-0.5"
               key={`accent-${colorVersion}`}
               onBlur={flushColor}
               onChange={(event) => {
@@ -315,7 +376,7 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({
             />
             <Input
               aria-label="Accent colour hex"
-              className="font-mono uppercase"
+              className="h-8 border-0 bg-transparent font-mono uppercase shadow-none focus-visible:ring-0"
               onChange={(event) => {
                 const next = normalizeHex(event.target.value);
                 if (next) {
@@ -328,30 +389,43 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({
             />
           </div>
           <div className="mt-3 grid grid-cols-6 gap-2">
-            {ACCENT_PRESETS.map((color) => (
-              <button
-                aria-label={`Use ${color.label} accent`}
-                className="h-8 rounded-md border border-border outline-none ring-offset-2 ring-offset-background transition focus:ring-2 focus:ring-ring"
-                key={color.value}
-                onClick={() => {
-                  onChange({
-                    ...settings,
-                    accentColor: color.value,
-                    accentSource: "manual",
-                  });
-                  bumpColorVersion();
-                }}
-                style={{
-                  backgroundColor: color.value,
-                  boxShadow:
-                    normalizeHex(settings.accentColor) === color.value.toLowerCase()
-                      ? "0 0 0 2px var(--primary)"
-                      : "none",
-                }}
-                title={color.label}
-                type="button"
-              />
-            ))}
+            {ACCENT_PRESETS.map((color) => {
+              const isActive =
+                normalizeHex(settings.accentColor) === color.value.toLowerCase();
+              return (
+                <button
+                  aria-label={`Use ${color.label} accent`}
+                  aria-pressed={isActive}
+                  className={cn(
+                    "relative flex h-9 items-center justify-center rounded-lg border border-black/10 outline-none ring-offset-2 ring-offset-background transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-110 focus-visible:ring-2 focus-visible:ring-ring",
+                    isActive && "scale-110",
+                  )}
+                  key={color.value}
+                  onClick={() => {
+                    onChange({
+                      ...settings,
+                      accentColor: color.value,
+                      accentSource: "manual",
+                    });
+                    bumpColorVersion();
+                  }}
+                  style={{
+                    backgroundColor: color.value,
+                    boxShadow: isActive ? "0 0 0 2px var(--primary)" : "none",
+                  }}
+                  title={color.label}
+                  type="button"
+                >
+                  {isActive ? (
+                    <Check
+                      aria-hidden="true"
+                      className="h-4 w-4 text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]"
+                      strokeWidth={3}
+                    />
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
         </div>
     </div>

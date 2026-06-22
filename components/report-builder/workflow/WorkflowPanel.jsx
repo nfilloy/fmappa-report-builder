@@ -42,10 +42,12 @@ const TABS = [
 ];
 
 export function WorkflowPanel({
+  boundary,
   enabledSectionCount,
   kpis,
   onAddSection,
   onApplyPreset,
+  onBoundaryChange,
   onDuplicateSection,
   onFileSelected,
   onLoadSampleOcf,
@@ -105,17 +107,25 @@ export function WorkflowPanel({
                   aria-label={tab.label}
                   aria-pressed={isActive}
                   className={cn(
-                    "relative flex h-11 w-11 items-center justify-center rounded-xl transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    "relative flex h-11 w-11 items-center justify-center rounded-xl outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                     isActive
-                      ? "mappa-gradient-1 text-white shadow-sm"
+                      ? "text-white"
                       : "text-muted-foreground hover:bg-secondary hover:text-foreground",
                   )}
                   onClick={() => setActive(tab.id)}
                   type="button"
                 >
-                  <Icon aria-hidden="true" className="h-5 w-5" />
+                  {isActive ? (
+                    <motion.span
+                      aria-hidden="true"
+                      className="mappa-gradient-1 absolute inset-0 rounded-xl shadow-sm"
+                      layoutId="workflow-rail-pill"
+                      transition={{ type: "spring", stiffness: 480, damping: 38 }}
+                    />
+                  ) : null}
+                  <Icon aria-hidden="true" className="relative z-10 h-5 w-5" />
                   {complete ? (
-                    <span className="absolute bottom-0 right-0 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground ring-2 ring-secondary">
+                    <span className="absolute bottom-0 right-0 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground ring-2 ring-secondary">
                       <Check aria-hidden="true" className="h-2.5 w-2.5" strokeWidth={3} />
                     </span>
                   ) : null}
@@ -190,8 +200,11 @@ export function WorkflowPanel({
 
               {active === "branding" ? (
                 <ReportSettingsPanel
+                  boundary={boundary}
                   framed={false}
+                  onBoundaryChange={onBoundaryChange}
                   onChange={setSettings}
+                  report={report}
                   settings={settings}
                 />
               ) : null}

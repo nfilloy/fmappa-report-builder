@@ -1,21 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import {
+  Download,
+  FileText,
   Leaf,
   Loader2,
   Maximize2,
+  UploadCloud,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ProgressiveFluxLoader } from "@/components/ui/progressive-flux-loader";
-import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Toaster } from "@/components/ui/sonner";
 import { Tabs } from "@/components/ui/tabs";
 import {
@@ -29,10 +29,11 @@ import { KpiCards } from "@/components/report-builder/KpiCards";
 import { ScopeDonut } from "@/components/report-builder/charts/ScopeDonut";
 import { SiteEmissionsTable } from "@/components/report-builder/SiteEmissionsTable";
 import { TopCategories } from "@/components/report-builder/TopCategories";
-import { ReportTopBar } from "@/components/report-builder/workflow/ReportTopBar";
+import { AppHeader } from "@/components/report-builder/workflow/AppHeader";
 import { WorkflowPanel } from "@/components/report-builder/workflow/WorkflowPanel";
 import { HtmlReport } from "@/components/report-html/HtmlReport";
 import { buildReport } from "@/lib/data/detectReportType";
+import { DEFAULT_PCF_BOUNDARY } from "@/lib/data/pcf";
 import { parseCsv } from "@/lib/data/parseCsv";
 import { formatPercent } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
@@ -52,13 +53,6 @@ import {
   updateSection,
 } from "@/lib/report/sections";
 
-const PDF_LOADER_PHASES = [
-  { at: 0, label: "preparing report" },
-  { at: 35, label: "rendering pages" },
-  { at: 70, label: "building pdf" },
-  { at: 92, label: "starting download" },
-];
-
 const SAMPLE_FILES = {
   ocf: "/sample_ocf_iso_14064.csv",
   pcf: "/sample_pcf_iso_14067.csv",
@@ -67,6 +61,12 @@ const SAMPLE_FILES = {
 const VIEW_TABS = [
   { label: "Document", value: "document" },
   { label: "Summary", value: "summary" },
+];
+
+const HOW_IT_WORKS = [
+  { icon: UploadCloud, title: "Upload your CSV", hint: "OCF or PCF dataset" },
+  { icon: FileText, title: "Configure sections", hint: "Edit copy & reorder" },
+  { icon: Download, title: "Export the PDF", hint: "Client-ready report" },
 ];
 
 const A4_PAGE_WIDTH_PX = 794;
@@ -98,27 +98,34 @@ function buildKpis(report, accent) {
   ];
 }
 
+const INITIAL_SETTINGS = {
+  clientName: "RELATS S.A.U.",
+  reportLabel: "Organisational Carbon Footprint Report 2024",
+  // The report is client-branded for Relats: default the accent to Relats'
+  // corporate red. Uploading a client logo re-derives the accent from it.
+  accentColor: RELATS_RED,
+  accentSource: "brand",
+  reportYear: "2024",
+  preparedBy: "Footprint Mappa",
+  preparedFor: "",
+  reportDate: "",
+  subtitle: "",
+  totalSourceLabel: "",
+  reportingPeriod: "",
+  notes: "",
+  logoDataUrl: "",
+};
+
 export function ReportBuilder() {
   const [report, setReport] = useState(null);
   const [sections, setSections] = useState([]);
   const [selectedSectionId, setSelectedSectionId] = useState("");
-  const [settings, setSettings] = useState({
-    clientName: "RELATS S.A.U.",
-    reportLabel: "Organisational Carbon Footprint Report 2024",
-    // The report is client-branded for Relats: default the accent to Relats'
-    // corporate red. Uploading a client logo re-derives the accent from it.
-    accentColor: RELATS_RED,
-    accentSource: "brand",
-    reportYear: "2024",
-    preparedBy: "Footprint Mappa",
-    preparedFor: "",
-    reportDate: "",
-    subtitle: "",
-    totalSourceLabel: "",
-    reportingPeriod: "",
-    notes: "",
-    logoDataUrl: "",
-  });
+  // Parsed CSV is retained so a boundary change can recompute the PCF model
+  // (total, percentages, breakdown, hotspots, exclusions) without re-uploading.
+  const [dataset, setDataset] = useState(null);
+  // PCF system boundary. OCF ignores it; the selector is PCF-only.
+  const [boundary, setBoundary] = useState(DEFAULT_PCF_BOUNDARY);
+  const [settings, setSettings] = useState(INITIAL_SETTINGS);
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [zoom, setZoom] = useState(1);
@@ -137,8 +144,12 @@ export function ReportBuilder() {
 
   const ingestCsv = useCallback((text, fileName) => {
     const rows = parseCsv(text);
-    const nextReport = buildReport(rows, fileName);
+    // A fresh dataset starts from the default boundary.
+    const nextBoundary = DEFAULT_PCF_BOUNDARY;
+    const nextReport = buildReport(rows, fileName, { boundary: nextBoundary });
     const nextSections = buildReportSections(nextReport);
+    setDataset({ rows, fileName });
+    setBoundary(nextBoundary);
     setReport(nextReport);
     setSections(nextSections);
     setSelectedSectionId(nextSections[0]?.id || "");
@@ -148,24 +159,50 @@ export function ReportBuilder() {
       clientName: nextReport.clientName,
       reportLabel: nextReport.reportTitle,
     }));
-
-    toast.success(`Loaded ${fileName}`, {
-      description: `${nextReport.reportTitle} · ${nextSections.length} sections ready to configure.`,
-    });
-
-    if (nextReport.kind === "ocf" && nextReport.totalSource === "calculated") {
-      toast.info("No Total empresa row found", {
-        description: "Company totals were calculated from the site rows.",
-      });
-    }
   }, []);
 
   const resetReportState = useCallback(() => {
     setReport(null);
     setSections([]);
     setSelectedSectionId("");
+    setDataset(null);
+    setBoundary(DEFAULT_PCF_BOUNDARY);
     setView("document");
   }, []);
+
+  // Changing the PCF boundary recomputes the model and regenerates the section
+  // copy (auto copy is not preserved across a boundary change — see README).
+  const handleBoundaryChange = useCallback(
+    (nextBoundary) => {
+      if (!dataset || nextBoundary === boundary) {
+        return;
+      }
+
+      const nextReport = buildReport(dataset.rows, dataset.fileName, {
+        boundary: nextBoundary,
+      });
+      const nextSections = buildReportSections(nextReport);
+      setBoundary(nextBoundary);
+      setReport(nextReport);
+      setSections(nextSections);
+      setSelectedSectionId(nextSections[0]?.id || "");
+    },
+    [dataset, boundary],
+  );
+
+  // Clicking the brand logo returns the app to its pristine landing state
+  // (soft reset, no page reload). The theme lives outside React state, so it is
+  // preserved automatically.
+  const handleGoHome = useCallback(() => {
+    resetReportState();
+    setSettings(INITIAL_SETTINGS);
+    setZoom(1);
+    setPdfLoading(false);
+    setLoading(false);
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [resetReportState]);
 
   const handleFileSelected = useCallback(async (file) => {
     resetReportState();
@@ -252,9 +289,14 @@ export function ReportBuilder() {
       const link = document.createElement("a");
       link.href = url;
       link.download = fileName;
+      link.rel = "noopener";
+      // The anchor must be in the DOM for the download to fire in Firefox, and
+      // the object URL must stay alive until the download has actually started,
+      // so we revoke it on a short delay instead of synchronously.
+      document.body.appendChild(link);
       link.click();
-      URL.revokeObjectURL(url);
-      toast.success("PDF downloaded", { description: fileName });
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (nextError) {
       toast.error("The PDF could not be generated.", {
         description: nextError.message,
@@ -504,6 +546,15 @@ export function ReportBuilder() {
     <TooltipProvider delayDuration={200}>
       <Toaster />
       <main className="app-dune-bg min-h-screen overflow-x-clip text-foreground">
+      <AppHeader
+        enabledCount={enabledSectionCount}
+        onDownload={handleDownloadPdf}
+        onHome={handleGoHome}
+        pdfLoading={pdfLoading}
+        report={report}
+        settings={settings}
+        totalSections={sections.length}
+      />
       <section
         className={cn(
           "mx-auto w-full max-w-6xl px-4 sm:px-8",
@@ -512,37 +563,14 @@ export function ReportBuilder() {
             : "flex min-h-dvh flex-col py-[clamp(1rem,2.5vh,2rem)]",
         )}
       >
-        <div
-          className={cn(
-            "mappa-hero-gradient flex min-w-0 flex-col px-1 sm:px-2",
-            report
-              ? "gap-6 py-8"
-              : "gap-[clamp(0.75rem,2.2vh,1.5rem)] py-[clamp(0.5rem,1.5vh,1.5rem)]",
-          )}
-        >
-          <div className="flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <Image
-                src="/brand/logo-gradient.png"
-                alt="Footprint Mappa"
-                width={107}
-                height={38}
-                priority
-                className="h-9 max-w-full object-contain dark:hidden"
-              />
-              <Image
-                src="/brand/logo-white.png"
-                alt="Footprint Mappa"
-                width={107}
-                height={38}
-                priority
-                className="hidden h-9 max-w-full object-contain dark:block"
-              />
-            </div>
-            <ThemeToggle className="shrink-0" />
-          </div>
-          <div className="flex min-w-0 flex-col gap-6 md:flex-row md:items-end md:justify-between">
-            <div className="min-w-0 max-w-xl">
+        {!report ? (
+          <div className="mappa-hero-gradient flex min-w-0 flex-col gap-[clamp(1rem,2.6vh,2rem)] px-1 py-[clamp(0.5rem,1.5vh,1.5rem)] sm:px-2">
+            <motion.div
+              className="min-w-0 max-w-xl"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            >
               <h1 className="max-w-xl text-[clamp(2.35rem,1.75rem+2vw,3.75rem)] font-bold leading-[1.02]">
                 <span className="text-foreground">Report Builder </span>
                 <Typewriter
@@ -562,38 +590,43 @@ export function ReportBuilder() {
                 to generate a live report preview with charts, configurable sections
                 and a polished PDF export.
               </p>
+            </motion.div>
+
+            <div className="grid min-w-0 gap-3 sm:grid-cols-3">
+              {HOW_IT_WORKS.map((step, index) => {
+                const StepIcon = step.icon;
+                return (
+                  <motion.div
+                    key={step.title}
+                    className="mappa-lift flex min-w-0 items-center gap-3 rounded-xl border border-border/60 bg-card/70 p-4 backdrop-blur-sm"
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      duration: 0.4,
+                      ease: [0.22, 1, 0.36, 1],
+                      delay: 0.12 + index * 0.08,
+                    }}
+                  >
+                    <span className="mappa-gradient-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white shadow-sm">
+                      <StepIcon aria-hidden="true" className="h-[18px] w-[18px]" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Step {index + 1}
+                      </p>
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {step.title}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {step.hint}
+                      </p>
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
           </div>
-          <AnimatePresence>
-            {pdfLoading ? (
-              <motion.div
-                key="pdf-loader"
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.2 }}
-                className="rounded-2xl border border-border/70 bg-card/80 px-5 py-5 shadow-sm backdrop-blur"
-              >
-                <ProgressiveFluxLoader
-                  duration={10}
-                  phases={PDF_LOADER_PHASES}
-                  textClassName="text-base sm:text-lg"
-                  barClassName="h-3"
-                  className="max-w-lg gap-4 [--flux-from:#041282] [--flux-to:#74e1ff]"
-                />
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
-        </div>
-
-        <ReportTopBar
-          enabledCount={enabledSectionCount}
-          onDownload={handleDownloadPdf}
-          pdfLoading={pdfLoading}
-          report={report}
-          settings={settings}
-          totalSections={sections.length}
-        />
+        ) : null}
 
         <div
           className={cn(
@@ -610,10 +643,12 @@ export function ReportBuilder() {
             )}
           >
             <WorkflowPanel
+              boundary={boundary}
               enabledSectionCount={enabledSectionCount}
               kpis={kpis}
               onAddSection={handleAddSection}
               onApplyPreset={handleApplyPreset}
+              onBoundaryChange={handleBoundaryChange}
               onDuplicateSection={handleDuplicateSection}
               onFileSelected={handleFileSelected}
               onLoadSampleOcf={handleLoadSampleOcf}
@@ -764,7 +799,7 @@ export function ReportBuilder() {
                     <CardContent className="p-0">
                       <div
                         ref={setPreviewEl}
-                        className="report-preview-viewport max-h-[calc(100dvh-12rem)] min-h-[520px] overflow-auto p-3 sm:p-4"
+                        className="report-preview-viewport max-h-[calc(100dvh-12rem)] min-h-[520px] overflow-auto p-4 sm:p-6"
                       >
                         <style>{HTML_REPORT_STYLES}</style>
                         <style>{HTML_REPORT_PREVIEW_STYLES}</style>

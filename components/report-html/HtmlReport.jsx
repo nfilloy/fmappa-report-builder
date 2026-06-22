@@ -76,8 +76,8 @@ function BreakdownReport({ report }) {
   );
 }
 
-// Out-of-boundary stages (cradle-to-gate). Only renders when the report carries
-// excluded stages (PCF); for OCF this is a no-op.
+// Out-of-boundary stages. Only renders when the report carries excluded stages
+// (PCF cradle-to-gate); empty under cradle-to-grave and a no-op for OCF.
 function ExcludedStagesReport({ report }) {
   const stages = report.excludedStages?.filter((stage) => stage.value > 0);
 
@@ -96,7 +96,7 @@ function ExcludedStagesReport({ report }) {
           <tr>
             <th>Downstream stage</th>
             <th className="number">Emissions (reference)</th>
-            <th className="number">Share of cradle-to-grave</th>
+            <th className="number">Share of full life cycle</th>
           </tr>
         </thead>
         <tbody>

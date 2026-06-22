@@ -1,4 +1,7 @@
+"use client";
+
 import * as React from "react";
+import { motion } from "framer-motion";
 
 import { cn } from "@/lib/utils";
 
@@ -10,6 +13,10 @@ function Tabs({
   triggerClassName,
   value,
 }) {
+  // Unique per instance so the sliding indicator never animates between two
+  // separate Tabs groups that happen to share the layout tree.
+  const layoutId = React.useId();
+
   return (
     <div
       aria-label={ariaLabel}
@@ -26,10 +33,10 @@ function Tabs({
           <button
             aria-selected={active}
             className={cn(
-              "min-w-0 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+              "relative min-w-0 rounded-md px-3 py-1.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
               active
-                ? "bg-card text-foreground shadow-sm"
-                : "hover:bg-card/60 hover:text-foreground",
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground",
               triggerClassName,
             )}
             disabled={item.disabled}
@@ -38,7 +45,15 @@ function Tabs({
             role="tab"
             type="button"
           >
-            <span className="block truncate">{item.label}</span>
+            {active ? (
+              <motion.span
+                aria-hidden="true"
+                className="absolute inset-0 rounded-md bg-card shadow-sm"
+                layoutId={`tab-pill-${layoutId}`}
+                transition={{ type: "spring", stiffness: 480, damping: 38 }}
+              />
+            ) : null}
+            <span className="relative z-10 block truncate">{item.label}</span>
           </button>
         );
       })}

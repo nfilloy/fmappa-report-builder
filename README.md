@@ -105,9 +105,18 @@ The provided CSVs carry no unit column, so the unit of the activity data is **as
 
 The unit convention lives in `lib/formatters.js` (`pickEmissionUnit`).
 
-## PCF Boundary (cradle-to-gate)
+## PCF Boundary (selectable: cradle-to-gate / cradle-to-grave)
 
-Relats manufactures intermediate components that are integrated into its customers' final products, so PCF studies are **cradle-to-gate**: only Materials, Manufacturing and Transport count towards the reported footprint, percentages and hotspots. **Distribution, Use and End of life** sit downstream of the factory gate and depend on the customer's final product, so they are reported **out of boundary for reference only** and excluded from the totals. Because products use different functional units, the combined headline is a **comparative portfolio sum, not an additive footprint**; per-product results are shown in the product table. The boundary flags live in `PCF_STAGE_GROUPS` (`lib/data/pcf.js`).
+The PCF system boundary is **user-selectable** from the branding panel (PCF reports only; OCF uses an organisational "operational control" boundary and is unaffected). Two presets are available, defined as data in `PCF_BOUNDARIES` (`lib/data/pcf.js`):
+
+- **`cradle-to-gate`** (default) — only **Materials, Manufacturing and Transport** count towards the reported footprint, percentages and hotspots. **Distribution, Use and End of life** sit downstream of the factory gate and depend on the customer's final product (Relats manufactures intermediate components integrated into its customers' final products), so they are reported **out of boundary for reference only** and excluded from the totals.
+- **`cradle-to-grave`** — the **full life cycle** is assessed (all six stages, materials → end of life). No stage is excluded, so there is no out-of-boundary table.
+
+In both modes, because products use different functional units, the combined headline is a **comparative portfolio sum, not an additive footprint**; per-product results are shown in the product table.
+
+Changing the boundary triggers a **full recompute** of the report model (total, percentages, breakdown, hotspots, exclusions) and **regenerates the section copy**.
+
+> **Known limitation:** a boundary change regenerates the auto-generated section text. Manual edits to section copy are **not preserved** across a boundary change — set the boundary first, then edit copy.
 
 ## Branding
 

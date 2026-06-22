@@ -10,6 +10,13 @@
 :root {
   --radius: 0.625rem; /* 10px, matches Mappa */
 
+  /* Motion tokens — a single brand easing + duration scale so every transition
+     and framer-motion spring shares the same calm, premium cadence. */
+  --ease-brand: cubic-bezier(0.22, 1, 0.36, 1); /* easeOutExpo-ish */
+  --motion-fast: 0.16s;
+  --motion-base: 0.24s;
+  --motion-slow: 0.38s;
+
   --background: #ffffff;
   --foreground: #14161f;
   --card: #ffffff;
@@ -241,5 +248,39 @@
     -webkit-background-clip: text;
     color: transparent;
     -webkit-text-fill-color: transparent;
+  }
+
+  /* Subtle lift on interactive surfaces (section tiles, cards) — the calm,
+     premium hover feel borrowed from Relats, kept understated. */
+  .mappa-lift {
+    transition:
+      transform var(--motion-base) var(--ease-brand),
+      box-shadow var(--motion-base) var(--ease-brand),
+      background-color var(--motion-base) var(--ease-brand),
+      border-color var(--motion-base) var(--ease-brand);
+  }
+
+  @media (hover: hover) {
+    .mappa-lift:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px -16px rgba(4, 18, 130, 0.45);
+    }
+  }
+}
+
+/* Honour reduced-motion: disable smooth scrolling, transitions and animations
+   for users who ask for it. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }

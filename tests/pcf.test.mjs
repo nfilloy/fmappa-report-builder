@@ -45,6 +45,73 @@ test("builds the PCF model from the provided sample CSV (cradle-to-gate)", () =>
   assert.ok(!hotspotKeys.some((key) => /^(4_|5_|6_)/.test(key)));
 });
 
+test("reports the in-boundary per-product total for cradle-to-gate", () => {
+  const csv = readFileSync("data/sample_pcf_iso_14067.csv", "utf8");
+  const report = buildPcfReport(parseCsv(csv), "sample_pcf_iso_14067.csv", {
+    boundary: "cradle-to-gate",
+  });
+
+  const bottle = report.entities.find((e) => e.name === "Botella PET 500ml");
+  // 27.781 + 16.29 + 20.45
+  assert.ok(Math.abs(bottle.totalEmissions - 64.521) < 1e-3);
+  assert.ok(report.excludedStages.length > 0);
+});
+
+test("builds the full life cycle under cradle-to-grave", () => {
+  const csv = readFileSync("data/sample_pcf_iso_14067.csv", "utf8");
+  const report = buildPcfReport(parseCsv(csv), "sample_pcf_iso_14067.csv", {
+    boundary: "cradle-to-grave",
+  });
+
+  assert.equal(report.boundaryBasis, "cradle-to-grave");
+  // All six stages drive the breakdown; nothing is excluded.
+  assert.equal(report.breakdown.length, 6);
+  assert.equal(report.entityColumns.length, 6);
+  assert.equal(report.excludedStages.length, 0);
+  assert.equal(report.excludedTotal, 0);
+  assert.equal(report.excludedStagesNote, "");
+
+  const bottle = report.entities.find((e) => e.name === "Botella PET 500ml");
+  // 27.781 + 16.29 + 20.45 + 3.201 + 37.345 + 2.008 = 107.075 (= total_emissions)
+  assert.ok(Math.abs(bottle.totalEmissions - 107.075) < 1e-3);
+  // The reported total now equals the cradle-to-grave total.
+  assert.ok(
+    Math.abs(report.total.totalEmissions - report.cradleToGraveTotal) < 1e-6,
+  );
+
+  // In-boundary percentages still sum to ~100%.
+  const totalPercentage = report.breakdown.reduce(
+    (sum, item) => sum + item.percentage,
+    0,
+  );
+  assert.ok(Math.abs(totalPercentage - 100) < 1e-6);
+});
+
+test("section copy reflects the selected boundary", () => {
+  const csv = readFileSync("data/sample_pcf_iso_14067.csv", "utf8");
+  const rows = parseCsv(csv);
+
+  const gate = buildReportSections(
+    buildPcfReport(rows, "sample.csv", { boundary: "cradle-to-gate" }),
+  );
+  const grave = buildReportSections(
+    buildPcfReport(rows, "sample.csv", { boundary: "cradle-to-grave" }),
+  );
+
+  const methodologyText = (sections) =>
+    sections.find((s) => s.id === "methodology").content;
+  const globalResultsText = (sections) =>
+    sections.find((s) => s.id === "global-results").content;
+
+  assert.ok(methodologyText(gate).includes("cradle-to-gate"));
+  assert.ok(methodologyText(grave).includes("cradle-to-grave"));
+  assert.ok(!methodologyText(grave).includes("intermediate components"));
+
+  // The comparative-portfolio caveat must remain in BOTH modes.
+  assert.ok(globalResultsText(gate).includes("comparative portfolio sum"));
+  assert.ok(globalResultsText(grave).includes("comparative portfolio sum"));
+});
+
 test("rejects CSV files missing the required PCF columns", () => {
   const csv = "product,total_emissions\nBottle,100";
 

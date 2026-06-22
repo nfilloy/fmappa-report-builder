@@ -98,29 +98,36 @@ export const FileUpload = memo(function FileUpload({
         />
       </label>
       {onLoadSampleOcf || onLoadSamplePcf ? (
-        <div className="grid grid-cols-2 gap-2">
-          {onLoadSampleOcf ? (
-            <Button
-              className="w-full"
-              onClick={onLoadSampleOcf}
-              type="button"
-              variant="ghost"
-            >
-              <Sparkles aria-hidden="true" />
-              Sample OCF
-            </Button>
-          ) : null}
-          {onLoadSamplePcf ? (
-            <Button
-              className="w-full"
-              onClick={onLoadSamplePcf}
-              type="button"
-              variant="ghost"
-            >
-              <Sparkles aria-hidden="true" />
-              Sample PCF
-            </Button>
-          ) : null}
+        <div className="flex flex-col gap-2">
+          {compact ? null : (
+            <span className="text-xs text-muted-foreground">
+              No file handy? Try a sample dataset:
+            </span>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            {onLoadSampleOcf ? (
+              <Button
+                className="w-full"
+                onClick={onLoadSampleOcf}
+                type="button"
+                variant="outline"
+              >
+                <Sparkles aria-hidden="true" />
+                Sample OCF
+              </Button>
+            ) : null}
+            {onLoadSamplePcf ? (
+              <Button
+                className="w-full"
+                onClick={onLoadSamplePcf}
+                type="button"
+                variant="outline"
+              >
+                <Sparkles aria-hidden="true" />
+                Sample PCF
+              </Button>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>
