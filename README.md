@@ -3,7 +3,7 @@
 Path B-oriented Organisational Carbon Footprint (OCF) and Product Carbon Footprint (PCF) report builder built from the Path A foundation.
 
 ```txt
-User uploads CSV -> browser parser -> normalised OCF/PCF model -> configurable section model -> HTML preview -> Playwright PDF
+User uploads CSV -> browser parser -> normalised OCF/PCF model -> configurable section model -> HTML preview -> Chromium PDF
 ```
 
 Uploaded files are parsed client-side. The app does not store or persist the CSV. The generated report model is sent to a minimal Next.js API route only when the user downloads the PDF.
@@ -12,7 +12,7 @@ Uploaded files are parsed client-side. The app does not store or persist the CSV
 
 I started with **Path A: Foundation** and evolved it into a **Path B: Customizable** report builder.
 
-The implementation supports OCF and PCF sample data. The report is represented as configurable sections with basic branding controls, rendered as an HTML preview, and exported to PDF through a minimal Playwright API route.
+The implementation supports OCF and PCF sample data. The report is represented as configurable sections with basic branding controls, rendered as an HTML preview, and exported to PDF through a minimal Chromium-backed API route.
 
 I intentionally did not implement database persistence, authentication, full template editing, DOCX export, or runtime AI integration in this MVP. Path C remains a documented future evolution over the section model.
 
@@ -26,7 +26,8 @@ I intentionally did not implement database persistence, authentication, full tem
 - shadcn/ui style primitives
 - Radix UI
 - Lucide icons
-- Playwright
+- Puppeteer + serverless Chromium for PDF export
+- Playwright for responsive E2E tests
 
 ## How To Run
 
@@ -56,6 +57,10 @@ npm run test:e2e
 The E2E starts its own Next dev server on a **runtime-resolved free port** (set
 `RESPONSIVE_TEST_URL` to point it at an already-running server instead), so it no longer collides
 with a dev server occupying a fixed port. It still requires the Chromium binary above.
+
+PDF export in Vercel uses `puppeteer-core` with `@sparticuz/chromium-min`. For local PDF export,
+set `PUPPETEER_EXECUTABLE_PATH` to a local Chrome/Chromium executable. In Vercel, the endpoint
+uses a default remote Sparticuz Chromium pack, and `CHROMIUM_PACK_URL` can override that URL.
 
 ## Input Data
 
@@ -181,11 +186,11 @@ To apply real Relats identity, upload the Relats logo in the branding panel (or 
 
 ## PDF Strategy
 
-The current target strategy is **HTML preview + Playwright PDF**.
+The current target strategy is **HTML preview + Chromium PDF**.
 
-The report model is rendered as HTML/CSS first. The browser preview is the source of truth, and the `/api/pdf` route renders the same report model with Playwright to produce the downloadable PDF.
+The report model is rendered as HTML/CSS first. The browser preview is the source of truth, and the `/api/pdf` route renders the same report model with Puppeteer-controlled Chromium to produce the downloadable PDF.
 
-Playwright is used because it is a better fit for configurable sections, branding and future Path C support than maintaining a separate PDF-only rendering surface.
+The original local implementation used Playwright for both E2E and PDF export, but Vercel serverless bundling failed on Playwright's browser metadata (`playwright-core/browsers.json`). Production PDF export therefore uses `puppeteer-core` plus `@sparticuz/chromium-min`, while Playwright remains the E2E test tool.
 
 The in-browser A4 canvas shows page boundaries, headers and footers to make editing feel close to the exported report. Pagination in the preview is an honest approximation; the exact final page breaks are still decided by Chromium during PDF export.
 
@@ -216,7 +221,7 @@ The PDF endpoint accepts the final report model, including configurable sections
 
 - **Build:** CSV parser, OCF normalisation, report section model, section toggles, basic branding controls and preview UI.
 - **Reuse:** Next.js, React, Tailwind, shadcn-style UI conventions, Lucide icons and browser File APIs.
-- **Adopt:** Playwright for HTML-to-PDF export instead of building a custom PDF engine.
+- **Adopt:** Chromium-based HTML-to-PDF export instead of building a custom PDF engine.
 
 Alternatives considered:
 
@@ -256,7 +261,7 @@ The main time went into:
 - Setting up the Next.js UI skeleton.
 - Building the CSV-to-OCF model.
 - Integrating PDF generation.
-- Evolving the PDF architecture towards configurable HTML preview + Playwright export.
+- Evolving the PDF architecture towards configurable HTML preview + Chromium export.
 - Checking the provided OCF sample against the generated report.
 - Reviewing the challenge documentation and closing obvious compliance gaps.
 
@@ -274,7 +279,7 @@ The main time went into:
 - The PDF is not a pixel-perfect replica of the provided Word reports.
 - The A4 preview page guides are approximate; exported pagination is generated by Chromium.
 - Relats branding is applied via the default corporate-red accent and an optional uploaded logo; a full approved Relats brand kit was not provided.
-- Playwright PDF generation requires browser binaries to be available in the execution environment.
+- PDF generation requires a Chromium executable in the execution environment; Vercel uses `@sparticuz/chromium-min`.
 - Runtime AI is not implemented.
 - Numeric parsing is intentionally simple.
 - Emission factors and carbon calculation methodology are out of scope; the app presents already calculated sample data.

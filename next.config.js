@@ -6,6 +6,7 @@ const configuredDevOrigins = (process.env.NEXT_ALLOWED_DEV_ORIGINS || "")
 
 const nextConfig = {
   allowedDevOrigins: ["192.168.1.47", ...configuredDevOrigins],
+  serverExternalPackages: ["@sparticuz/chromium-min"],
 };
 
 // Let the responsive E2E boot its own dev server in an isolated build dir so its

@@ -204,7 +204,7 @@
   <h1>Footprint Mappa Report Builder</h1>
   <p class="lead">Generador de informes PDF de huella de carbono <b>OCF</b> (ISO 14064-1) y <b>PCF</b> (ISO 14067) a partir de CSV. Path A sólido evolucionado a <b>Path B configurable</b>, con un ángulo central de <b>genericidad</b>. Cada afirmación técnica de este documento apunta a <span class="ref">archivo:línea</span> con un fragmento verbatim del código.</p>
   <div class="meta">
-    <span><b>Stack:</b> Next.js 16 · React 19 · Tailwind v4 · shadcn/ui · Playwright</span>
+    <span><b>Stack:</b> Next.js 16 · React 19 · Tailwind v4 · shadcn/ui · Puppeteer/Chromium · Playwright E2E</span>
     <span><b>Render:</b> un único componente <code class="inline">HtmlReport</code> → preview A4 + PDF</span>
     <span><b>Backend:</b> solo <code class="inline">POST /api/pdf</code></span>
   </div>
@@ -231,7 +231,7 @@
       <tr><td><code>lib/formatters.js</code></td><td>Unidades y redondeo (cálculo a precisión completa, display formateado).</td><td><code>formatPercent</code> (12-18) · <code>EMISSION_UNIT_SCALES</code> (35-45) · <code>pickEmissionUnit</code> (47-54) · <code>formatEmissions</code> (58-65)</td></tr>
       <tr><td><code>lib/color/contrast.js</code></td><td>Helpers WCAG (sin DOM).</td><td><code>contrastRatio</code> (54-60) · <code>bestTextOn</code> (63-67) · <code>ensureReadable</code> (73-86)</td></tr>
       <tr><td><code>lib/color/extractPalette.js</code></td><td>Extrae paleta del logo (canvas, solo navegador).</td><td><code>extractPalette</code> (52-130)</td></tr>
-      <tr><td><code>app/api/pdf/route.js</code></td><td>Único backend: render Playwright → PDF.</td><td><code>POST</code> (12-67)</td></tr>
+      <tr><td><code>app/api/pdf/route.js</code></td><td>Único backend: HTML → Puppeteer/Chromium → PDF.</td><td><code>POST</code></td></tr>
       <tr><td><code>components/report-builder/ReportBuilder.jsx</code></td><td>Orquestador de estado y handlers principales del flujo.</td><td><code>ingestCsv</code> (252-282) · <code>handleConfirmMapping</code> (288-308) · <code>handleBoundaryChange</code> (326-342) · <code>handleDownloadPdf</code> (418-458)</td></tr>
       <tr><td><code>components/report-builder/workflow/WorkflowPanel.jsx</code></td><td>Panel lateral del flujo: datos, settings y secciones.</td><td><code>WorkflowPanel</code> (44-236)</td></tr>
       <tr><td><code>components/report-builder/ReportDownloadButton.jsx</code></td><td>Botón de descarga con progreso/estado visual.</td><td><code>ReportDownloadButton</code> (7-43)</td></tr>
@@ -444,11 +444,11 @@ const fileName = `${report.kind}-report-${settings.reportYear || "2024"}.pdf`;</
     <div class="conn"></div>
     <div class="step"><span class="num">2</span><div class="meta">
       <p><b>La route renderiza HTML y lanza Chromium</b> · <span class="ref">app/api/pdf/route.js:25-43</span> — <code>POST</code></p>
-      <div class="code"><div class="cap"><span>renderHtmlReportDocument → chromium.launch → page.pdf con cabecera/pie</span><span class="tag">app/api/pdf/route.js:25-43</span></div>
+      <div class="code"><div class="cap"><span>renderHtmlReportDocument → puppeteer.launch → page.pdf con cabecera/pie</span><span class="tag">app/api/pdf/route.js</span></div>
 <pre><code>const html = await renderHtmlReportDocument({ report, sections, settings });
-browser = await chromium.launch({ headless: true });
+browser = await puppeteer.launch(await resolveBrowserLaunchOptions());
 const page = await browser.newPage();
-await page.setContent(html, { waitUntil: "networkidle" });
+await page.setContent(html, { waitUntil: "networkidle0" });
 const pdf = await page.pdf({
   format: "A4",
   displayHeaderFooter: true,
@@ -1059,9 +1059,11 @@ export function formatEmissions(value, unit = DEFAULT_UNIT) {
   "framer-motion": "^12.40.0",
   "lucide-react": "^0.468.0",
   "next": "^16.0.0",
-  "playwright": "^1.61.0",
+  "@sparticuz/chromium-min": "^149.0.0",
   "react": "^19.0.0",
   "react-dom": "^19.0.0",
+  "playwright": "^1.61.0",
+  "puppeteer-core": "^25.2.1",
   "recharts": "^3.8.1",
   "sonner": "^2.0.7",
   "tailwindcss": "^4.0.0"
@@ -1079,10 +1081,11 @@ export function formatEmissions(value, unit = DEFAULT_UNIT) {
       <tr><td><b>recharts</b></td><td>Gráficos de la vista "Summary" · <code>components/report-builder/charts/ScopeDonut.jsx:42</code>.</td><td>En el INFORME no se usa: ver nota.</td></tr>
       <tr><td><b>@dnd-kit</b></td><td>Reordenar secciones por arrastre (panel de workflow).</td><td>react-beautiful-dnd sin mantenimiento.</td></tr>
       <tr><td><b>sonner</b></td><td>Toasts no bloqueantes · <code>ReportBuilder.jsx:5, 245-246, 372-379</code>.</td><td>Alerts nativos romperían el flujo.</td></tr>
-      <tr><td><b>Playwright</b></td><td>HTML→PDF · <code>route.js:2, 26</code>; y E2E · <code>tests/responsive.e2e.mjs:7</code>.</td><td>Decisión central — sección E.</td></tr>
+      <tr><td><b>Puppeteer + serverless Chromium</b></td><td>HTML→PDF en <code>POST /api/pdf</code>; Chromium se resuelve con <code>@sparticuz/chromium-min</code>.</td><td>Decisión central — sección E; evita el fallo de empaquetado de Playwright en Vercel.</td></tr>
+      <tr><td><b>Playwright</b></td><td>E2E responsive · <code>tests/responsive.e2e.mjs:7</code>.</td><td>Se mantiene para QA, no para el endpoint productivo.</td></tr>
     </tbody>
   </table>
-  <div class="note"><span class="t">Dos familias de gráficos (clave para la demo)</span>Los gráficos <b>del informe</b> son <b>SVG generado a mano</b> en <code class="inline">lib/report/svgCharts.js</code> (<code>donutSvg</code> 22-52, <code>stackedBarSvg</code> 56-109), no recharts. Así el mismo string SVG sale idéntico en preview y en el render server-side de Playwright (<code>renderToStaticMarkup</code>), sin depender de que recharts hidrate dentro de Chromium. recharts queda para la vista interactiva "Summary".</div>
+  <div class="note"><span class="t">Dos familias de gráficos (clave para la demo)</span>Los gráficos <b>del informe</b> son <b>SVG generado a mano</b> en <code class="inline">lib/report/svgCharts.js</code> (<code>donutSvg</code> 22-52, <code>stackedBarSvg</code> 56-109), no recharts. Así el mismo string SVG sale idéntico en preview y en el render server-side de Puppeteer/Chromium (<code>renderToStaticMarkup</code>), sin depender de que recharts hidrate dentro de Chromium. recharts queda para la vista interactiva "Summary".</div>
 </section>
 
 <!-- ===================== E ===================== -->
@@ -1092,7 +1095,7 @@ export function formatEmissions(value, unit = DEFAULT_UNIT) {
   <table class="tbl">
     <thead><tr><th>Opción</th><th>Pros</th><th>Contras</th><th>Veredicto</th></tr></thead>
     <tbody>
-      <tr><td><b>HTML + Playwright</b></td><td>HTML/CSS reales; <b>un único render</b> preview+PDF; gráficos/branding fáciles; encaja con IA futura.</td><td>Chromium en servidor; cortes de página los decide Chromium.</td><td class="win">ELEGIDA</td></tr>
+      <tr><td><b>HTML + Puppeteer/Chromium</b></td><td>HTML/CSS reales; <b>un único render</b> preview+PDF; gráficos/branding fáciles; encaja con IA futura; compatible con Vercel.</td><td>Chromium en servidor; primer arranque descarga/prepara el binario; cortes de página los decide Chromium.</td><td class="win">ELEGIDA</td></tr>
       <tr><td><code>@react-pdf/renderer</code></td><td>React, client-side, sin backend.</td><td>No es HTML real; no reutiliza Tailwind; <b>dos superficies</b> (preview+PDF); menos natural para toggles/IA.</td><td>Buena para Path A puro</td></tr>
       <tr><td><code>pdfmake</code></td><td>Tablas, declarativo.</td><td>DSL propia; poco natural en React.</td><td>Fallback</td></tr>
       <tr><td><code>jsPDF</code></td><td>Ligero, PDFs simples.</td><td>Layout manual; débil para informes largos.</td><td>No</td></tr>
@@ -1102,13 +1105,13 @@ export function formatEmissions(value, unit = DEFAULT_UNIT) {
       <tr><td><b>Gotenberg</b></td><td>Servicio Docker de conversión.</td><td>Infraestructura Docker; excesivo para MVP.</td><td>Si hay backend dedicado</td></tr>
     </tbody>
   </table>
-  <h3>Por qué Playwright (anclado al código)</h3>
+  <h3>Por qué HTML-to-PDF con Chromium (anclado al código)</h3>
   <ol>
     <li><b>Fidelidad + un solo render.</b> El documento se construye con el mismo <code class="inline">HtmlReport</code> que la preview (<span class="ref">renderHtmlReport.js:52-59</span>) y se exporta con <code class="inline">page.pdf</code> (<span class="ref">route.js:31-43</span>).</li>
     <li><b>Cabecera/pie y portada reutilizan el modelo</b> (<span class="ref">renderHtmlReport.js:75-151</span>).</li>
-    <li><b>Consolidación de herramientas:</b> Playwright ya es la dependencia del E2E (<span class="ref">tests/responsive.e2e.mjs:7</span>).</li>
+    <li><b>Despliegue en Vercel:</b> el endpoint usa <code class="inline">puppeteer-core</code> y <code class="inline">@sparticuz/chromium-min</code> para evitar empaquetar browsers de Playwright en la Function.</li>
   </ol>
-  <div class="note ok"><span class="t">Frase de defensa</span>"Para Path A puro <code class="inline">@react-pdf/renderer</code> bastaba; pero el objetivo es Path B con preview editable y branding, y posible IA. Con HTML+Playwright la preview es la fuente de verdad y un solo render sirve para pantalla y PDF. Para producción evaluaría PrinceXML/DocRaptor."</div>
+  <div class="note ok"><span class="t">Frase de defensa</span>"Para Path A puro <code class="inline">@react-pdf/renderer</code> bastaba; pero el objetivo es Path B con preview editable y branding, y posible IA. Con HTML-to-PDF la preview es la fuente de verdad y un solo render sirve para pantalla y PDF. En Vercel uso Puppeteer con Chromium serverless porque es más compatible con Functions; para producción exigente evaluaría PrinceXML/DocRaptor."</div>
 </section>
 
 <!-- ===================== F ===================== -->
@@ -1168,7 +1171,7 @@ export function formatEmissions(value, unit = DEFAULT_UNIT) {
         <li>PDF no es réplica pixel-perfect del Word de muestra.</li>
         <li>Paginación de preview aproximada; cortes finales por Chromium.</li>
         <li>Cambio de boundary y "Restore" no preservan ediciones manuales (<span class="ref">README.md:131</span>).</li>
-        <li>Playwright requiere binarios de navegador.</li>
+        <li>PDF requiere un Chromium disponible en runtime; en Vercel se usa <code class="inline">@sparticuz/chromium-min</code>.</li>
         <li>IA en runtime no implementada.</li>
         <li>Parseo numérico simple; <code class="inline">1.234,56</code> ambiguo se avisa, no se adivina (<span class="ref">numeric.js:5-7</span>).</li>
         <li>Factores de emisión fuera de alcance: se presentan datos ya calculados.</li>
@@ -1206,8 +1209,9 @@ export function formatEmissions(value, unit = DEFAULT_UNIT) {
   <h2 class="sec"><span class="n">K</span> Preguntas probables del tribunal + respuestas</h2>
 
   <details class="qa"><summary class="q">¿Por qué Path B y no Path A simple o Path C?</summary><div class="a"><p>El valor de producto está en la configurabilidad y la genericidad; Path C habría sido débil y arriesgado en demo. El brief dice que un Path A fuerte &gt; Path C débil. Entrego Path B sólido con Path C documentado (<span class="ref">README.md:11-18</span>).</p></div></details>
-  <details class="qa"><summary class="q">¿Por qué Playwright y no @react-pdf/renderer?</summary><div class="a"><p>Para no mantener dos superficies. Un solo <code class="inline">HtmlReport</code> sirve para preview (<span class="ref">ReportBuilder.jsx:1128-1136</span>) y PDF (<span class="ref">renderHtmlReport.js:49-73</span>).</p></div></details>
-  <details class="qa"><summary class="q">¿Playwright o Puppeteer?</summary><div class="a"><p>Equivalentes para HTML→PDF; elijo Playwright porque ya es la dependencia del E2E (<span class="ref">tests/responsive.e2e.mjs:7</span>): QA y export comparten herramienta.</p></div></details>
+  <details class="qa"><summary class="q">¿Por qué Chromium y no @react-pdf/renderer?</summary><div class="a"><p>Para no mantener dos superficies. Un solo <code class="inline">HtmlReport</code> sirve para preview (<span class="ref">ReportBuilder.jsx:1128-1136</span>) y PDF (<span class="ref">renderHtmlReport.js:49-73</span>).</p></div></details>
+  <details class="qa"><summary class="q">¿Playwright o Puppeteer?</summary><div class="a"><p>Ambos son válidos para HTML→PDF. Playwright se mantiene para E2E; el endpoint productivo usa Puppeteer porque <code class="inline">puppeteer-core</code> + <code class="inline">@sparticuz/chromium-min</code> encaja mejor con Vercel Functions.</p></div></details>
+  <details class="qa"><summary class="q">¿Qué fallo apareció en Vercel y cómo se resolvió?</summary><div class="a"><p>Vercel fallaba al descargar PDFs con <code class="inline">Cannot find module '/var/task/node_modules/playwright-core/browsers.json'</code>. No era un fallo del HTML ni del modelo del informe: era un problema de empaquetado/runtime de Playwright en la Function serverless. La solución fue conservar la arquitectura HTML→PDF, pero cambiar el launcher productivo a Puppeteer con Chromium serverless.</p></div></details>
   <details class="qa"><summary class="q">¿La preview es idéntica al PDF?</summary><div class="a"><p>Mismo componente, estilos y SVG; la única diferencia es la paginación (cortes finales por Chromium). La preview los aproxima con guías de página (<span class="ref">ReportBuilder.jsx:740-767</span>, <span class="ref">ReportBuilder.jsx:1137-1143</span>).</p></div></details>
   <details class="qa"><summary class="q">¿Y un CSV con ';' o decimales con coma?</summary><div class="a"><p>Separador autodetectado (<span class="ref">parseCsv.js:6-22</span>) y coma decimal → punto (<span class="ref">numeric.js:21-24</span>).</p></div></details>
   <details class="qa"><summary class="q">¿Qué pasa con un valor no parseable?</summary><div class="a"><p>Vacío = 0 sin aviso; no vacío no parseable = 0 + warning (<span class="ref">numeric.js:8-30</span>, <span class="ref">ocf.js:80-86</span>) → toast (<span class="ref">ReportBuilder.jsx:87-91</span>, <span class="ref">ReportBuilder.jsx:244-247</span>). Nunca redondeo a 0 en silencio.</p></div></details>
