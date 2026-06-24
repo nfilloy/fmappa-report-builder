@@ -843,7 +843,7 @@ export function ReportBuilder() {
                 />
               </h1>
               <p className="mt-4 max-w-md text-base leading-7 text-muted-foreground">
-                Upload an organisational (OCF) or product (PCF) carbon footprint CSV
+                Upload an organisationallllll (OCF) or product (PCF) carbon footprint CSV
                 to generate a live report preview with charts, configurable sections
                 and a polished PDF export.
               </p>
