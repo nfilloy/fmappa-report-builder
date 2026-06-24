@@ -45,6 +45,18 @@ npm run test
 npm run build
 ```
 
+`npm test` runs the **unit suite only** (`tests/*.test.mjs`) — fast, deterministic and
+browser-free. The Playwright responsive E2E lives in `tests/*.e2e.mjs` and runs separately:
+
+```bash
+npx playwright install chromium   # one-time: install the browser binary
+npm run test:e2e
+```
+
+The E2E starts its own Next dev server on a **runtime-resolved free port** (set
+`RESPONSIVE_TEST_URL` to point it at an already-running server instead), so it no longer collides
+with a dev server occupying a fixed port. It still requires the Chromium binary above.
+
 ## Input Data
 
 The MVP is built for the provided OCF sample:
@@ -109,14 +121,35 @@ The unit convention lives in `lib/formatters.js` (`pickEmissionUnit`).
 
 The PCF system boundary is **user-selectable** from the branding panel (PCF reports only; OCF uses an organisational "operational control" boundary and is unaffected). Two presets are available, defined as data in `PCF_BOUNDARIES` (`lib/data/pcf.js`):
 
-- **`cradle-to-gate`** (default) — only **Materials, Manufacturing and Transport** count towards the reported footprint, percentages and hotspots. **Distribution, Use and End of life** sit downstream of the factory gate and depend on the customer's final product (Relats manufactures intermediate components integrated into its customers' final products), so they are reported **out of boundary for reference only** and excluded from the totals.
+- **`cradle-to-gate`** (default) — only **Materials, Manufacturing and Transport** count towards the reported footprint, percentages and hotspots. **Distribution, Use and End of life** sit downstream of the factory gate and depend on the **final application of the product**, so they are reported **out of boundary for reference only** and excluded from the totals. The copy is client-neutral and does not assert a specific business model.
 - **`cradle-to-grave`** — the **full life cycle** is assessed (all six stages, materials → end of life). No stage is excluded, so there is no out-of-boundary table.
 
 In both modes, because products use different functional units, the combined headline is a **comparative portfolio sum, not an additive footprint**; per-product results are shown in the product table.
 
 Changing the boundary triggers a **full recompute** of the report model (total, percentages, breakdown, hotspots, exclusions) and **regenerates the section copy**.
 
-> **Known limitation:** a boundary change regenerates the auto-generated section text. Manual edits to section copy are **not preserved** across a boundary change — set the boundary first, then edit copy.
+> **Known limitation:** a **boundary change** and the **Restore default sections** action fully regenerate the auto-generated section text, so manual edits to section copy are **not preserved** across those two actions — set the boundary first, then edit copy. (Editing client name, reporting year or data sources does preserve manual edits — see *Genericity* below.)
+
+## Genericity (client / year / data sources as one source of truth)
+
+The report is correct for **any** client, reporting year and dataset, not just the bundled sample:
+
+- **Client name and reporting year** flow from the branding form (`settings.clientName`, `settings.reportYear`) into **both** the cover and the generated narrative copy as a single source of truth. The report **title** is derived from the report kind + year (e.g. `Organisational Carbon Footprint Report 2027`) and is shared by the cover, page chrome and PDF header; editing the year updates all of them. Editing the *Report label* directly pins a custom title that survives later year changes.
+- **Reactivity:** editing the client name, year or data sources **regenerates the auto-generated copy in place**, while **preserving any sections you have manually edited** (tracked per-section). Manually edited sections keep their text; untouched sections pick up the new metadata.
+- **Conditional cross-references:** the executive summary and key insights only mention the largest site / most material Scope 3 category (OCF) or the highest-impact product (PCF) when the corresponding section is actually included. Switching to the **Executive brief** template (which omits those sections) updates the copy so it never references analysis the document does not contain.
+- **Data sources** are **form-driven metadata**, edited as a comma-separated list in the branding panel and threaded into the methodology badges and prose. They default to the per-kind sources of the loaded dataset so the sample is unchanged.
+- The generated copy contains **no client-specific assertions** (no hardwired "Relats" claims, no "intermediate components" business-model statement) and **no internal sample-data meta-commentary** ("illustrative sample data" sentences were removed). Defaults keep the bundled sample visually identical (RELATS S.A.U. / 2024 / same data sources / same numbers); changing the form propagates everywhere.
+
+## Robustness & assumptions (uploading any valid OCF/PCF CSV)
+
+The goal is that uploading any valid OCF/PCF CSV either produces a correct report, recovers via user-driven column mapping, or fails loudly — never a silently-wrong number.
+
+- **Total-row detection (OCF) is label-independent.** The company-wide total row is found by (1) a flexible, case-insensitive label match (`total empresa`, `total`, `company total`, `grand total`, `total company`, `totales`), then (2) a structural fallback — the single row whose total emissions ≈ the sum of all other rows (within ~1% for rounding) — and only otherwise (3) the total is computed from the site rows (`totalSource: "calculated"`). The detected total row is excluded from the site table by identity, never by label, so an unrecognised total label can no longer be rendered as a phantom plant or double-counted into the headline figure.
+- **The field delimiter is auto-detected.** The CSV parser detects the separator from the header line among `,`, `;` and tab (defaulting to `,`), so semicolon-delimited European Excel exports — where `;` separates fields and `,` is the decimal separator (`27,781`) — parse correctly without manual conversion. Quoted delimiters inside a field stay literal.
+- **Malformed values warn instead of silently zeroing.** A blank/empty cell is a legitimate `0` (no warning). A **non-empty** cell that cannot be parsed is still treated as `0` but is collected as a warning (`report.warnings`, as `{ row, column, rawValue }`) and surfaced as a non-blocking toast (e.g. *"3 value(s) couldn't be read and were treated as 0 (e.g. 'Planta X' → total_scope_2)"*). Ambiguous thousands separators (`1.234,56`) are **not** guessed at — warning is the intended behaviour; the single-comma-decimal case is still handled.
+- **PCF stage columns are validated.** Because the PCF model is built from the lifecycle stage columns, the in-boundary stages (`total_materials`, `total_manufacturing`, `total_transport`) are required alongside `product`, `functional_unit`, `total_emissions`. A CSV missing them fails clearly (*"Missing required columns: …"*) rather than producing a 0 footprint next to a non-zero `total_emissions`. Downstream columns (`total_distribution`, `total_use`, `total_end_of_life`) stay optional and default to `0`.
+- **Hybrid schema detection: exact auto-detect, then ask.** A well-formed CSV is auto-detected by an exact header check (`entity` + `total_scope_1` → OCF; `product` + `functional_unit` → PCF) and builds with **no mapping panel**. On any column-shaped failure the app does **not** guess the schema — the mapping panel opens and asks the user *"OCF or PCF?"* explicitly, then they map the columns.
+- **On-failure column mapping (bounded, by design).** When an upload fails validation on column issues (unknown type or missing required columns), an inline mapping panel appears: the user picks the target schema (OCF/PCF), then each **required** field gets a native `<select>` of the CSV's actual headers (with exact / case-insensitive matches pre-selected). The **detail columns are also mappable** — they live in a collapsed *"Optional columns (N) — auto-matched, expand to adjust"* section, each pre-filled by exact header name, so canonical detail columns auto-select and you only touch the ones you renamed (a renamed detail column flows its value into the detailed table/hotspots instead of being silently treated as `0`). Only the required fields block "Build report"; an optional column left "— not present —" is the user's explicit `0`. On confirm, the columns are renamed to the canonical keys and the report is rebuilt; if a required field is still unmapped the panel stays open. This is **not** a generic arbitrary-CSV engine: it only remaps onto the **two known schemas (OCF/PCF)** and only when normal validation fails — the happy path (a CSV that already validates, including the bundled samples) never shows the mapping UI.
 
 ## Branding
 
@@ -128,7 +161,7 @@ The deliverable is **client-branded for Relats**. The report accent defaults to 
 
 To apply real Relats identity, upload the Relats logo in the branding panel (or replace the default accent with an approved colour).
 
-> **Note on sample data:** the bundled CSVs use simplified, generic sample entities (e.g. "Planta Barcelona", "Botella PET 500ml"). They are placeholders to exercise the pipeline. The report template adapts to real Relats plants (Caldes, Morocco, Vietnam, Mexico, China) and product families (e.g. Shockshield, VSC25) when their data is provided.
+> **Note on sample data:** the bundled CSVs use simplified, generic sample entities (e.g. "Planta Barcelona", "Botella PET 500ml") as placeholders to exercise the pipeline. The report adapts to whatever plants / product families are supplied in the source CSV; this placeholder note is internal context only and never appears in the generated deliverable.
 
 ## What The App Does
 

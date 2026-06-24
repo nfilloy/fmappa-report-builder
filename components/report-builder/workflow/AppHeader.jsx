@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
-import DownloadButton from "@/components/ui/button-download";
+import { ReportDownloadButton } from "@/components/report-builder/ReportDownloadButton";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 // Single sticky app bar. It carries the Mappa brand at all times and, once a
@@ -20,41 +19,6 @@ export function AppHeader({
 }) {
   const hasReport = Boolean(report);
 
-  // The DownloadButton is progress-driven, but the real PDF job only exposes a
-  // boolean (`pdfLoading`). So we creep the progress toward ~90% while it runs
-  // and snap to 100% + a brief "Downloaded" state the moment it finishes — no
-  // fake fixed duration that could outlast the actual work.
-  const [downloadStatus, setDownloadStatus] = useState("idle");
-  const [progress, setProgress] = useState(0);
-  const wasDownloading = useRef(false);
-
-  useEffect(() => {
-    if (pdfLoading) {
-      wasDownloading.current = true;
-      setDownloadStatus("downloading");
-      setProgress((p) => (p < 8 ? 8 : p));
-      const creep = setInterval(() => {
-        setProgress((p) => (p >= 90 ? 90 : p + 3));
-      }, 180);
-      return () => clearInterval(creep);
-    }
-    if (wasDownloading.current) {
-      wasDownloading.current = false;
-      setProgress(100);
-      setDownloadStatus("downloaded");
-      const reset = setTimeout(() => {
-        setDownloadStatus("idle");
-        setProgress(0);
-      }, 1200);
-      return () => clearTimeout(reset);
-    }
-  }, [pdfLoading]);
-
-  const handleDownloadClick = () => {
-    if (downloadStatus !== "idle") return;
-    onDownload?.();
-  };
-
   return (
     <header className="sticky top-0 z-30 border-b border-border/60 bg-background/70 backdrop-blur-md">
       <div className="mx-auto flex w-full max-w-6xl items-center gap-4 px-4 py-3 sm:px-8">
@@ -70,7 +34,7 @@ export function AppHeader({
             width={107}
             height={38}
             priority
-            className="h-8 max-w-full object-contain dark:hidden"
+            className="h-8 w-auto max-w-full object-contain dark:hidden"
           />
           <Image
             src="/brand/logo-white.png"
@@ -78,7 +42,7 @@ export function AppHeader({
             width={107}
             height={38}
             priority
-            className="hidden h-8 max-w-full object-contain dark:block"
+            className="hidden h-8 w-auto max-w-full object-contain dark:block"
           />
         </button>
 
@@ -100,10 +64,9 @@ export function AppHeader({
 
         <div className="flex shrink-0 items-center gap-2">
           {hasReport ? (
-            <DownloadButton
-              downloadStatus={downloadStatus}
-              onClick={handleDownloadClick}
-              progress={progress}
+            <ReportDownloadButton
+              onDownload={onDownload}
+              pdfLoading={pdfLoading}
             />
           ) : null}
           <ThemeToggle className="shrink-0" />

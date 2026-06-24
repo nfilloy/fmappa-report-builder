@@ -14,9 +14,14 @@ interface DownloadButtonProps {
 export default function DownloadButton({ downloadStatus, progress, onClick, className }: DownloadButtonProps) {
     return (
         <Button
+            variant="default"
+            size="default"
+            aria-label="Download report"
             onClick={onClick}
             className={cn(
-                "rounded-xl w-40 relative overflow-hidden select-none",
+                // Icon-only below `sm` (square button) so the header cluster fits a
+                // 320px viewport; full icon + label from `sm` up.
+                "rounded-xl relative overflow-hidden select-none w-10 px-0 sm:w-40 sm:px-5",
                 downloadStatus === "downloading" && "bg-primary/50 hover:bg-primary/50",
                 downloadStatus !== "idle" && "pointer-events-none",
                 className,
@@ -25,19 +30,19 @@ export default function DownloadButton({ downloadStatus, progress, onClick, clas
             {downloadStatus === "idle" && (
                 <>
                     <Download className="h-4 w-4" />
-                    Download
+                    <span className="hidden sm:inline">Download</span>
                 </>
             )}
             {downloadStatus === "downloading" && (
                 <div className="z-[5] flex items-center justify-center">
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {progress}%
+                    <Loader2 className="h-4 w-4 animate-spin sm:mr-2" />
+                    <span className="hidden sm:inline">{progress}%</span>
                 </div>
             )}
             {downloadStatus === "downloaded" && (
                 <>
                     <CheckCircle className="h-4 w-4" />
-                    <span>Downloaded</span>
+                    <span className="hidden sm:inline">Downloaded</span>
                 </>
             )}
             {downloadStatus === "complete" && <span className="text-primary">Download</span>}

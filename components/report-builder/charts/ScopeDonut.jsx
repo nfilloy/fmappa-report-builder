@@ -11,6 +11,7 @@ import { BRAND } from "@/lib/report/chartTheme";
 // carries its own colour in the report model.
 export const ScopeDonut = memo(function ScopeDonut({
   breakdown,
+  expanded = false,
   total,
   title = "Breakdown",
   unit,
@@ -32,12 +33,18 @@ export const ScopeDonut = memo(function ScopeDonut({
   );
 
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
-      <CardContent className="@container flex min-w-0 flex-col items-center gap-6 @sm:flex-row">
-        <div className="relative h-40 w-40 shrink-0 sm:h-44 sm:w-44">
+      <CardContent
+        className={
+          expanded
+            ? "grid min-h-[266px] min-w-0 gap-6 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center"
+            : "flex min-h-[266px] min-w-0 flex-col items-center gap-6"
+        }
+      >
+        <div className={expanded ? "relative mx-auto h-40 w-40 shrink-0 sm:mx-0 sm:h-44 sm:w-44" : "relative h-40 w-40 shrink-0 sm:h-44 sm:w-44"}>
           {hasValues ? (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -75,7 +82,7 @@ export const ScopeDonut = memo(function ScopeDonut({
           {data.map((entry) => (
             <li
               key={entry.name}
-              className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-0.5 text-sm"
+              className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-0.5 text-sm"
             >
               <span
                 aria-hidden="true"
@@ -85,10 +92,13 @@ export const ScopeDonut = memo(function ScopeDonut({
               <span className="min-w-0 break-words font-medium leading-snug text-foreground [hyphens:none]">
                 {entry.name}
               </span>
-              <span className="col-start-2 flex flex-wrap items-baseline gap-x-1.5 leading-snug text-muted-foreground tabular-nums">
-                <span className="whitespace-nowrap">{formatEmissions(entry.value, unit)}</span>
-                <span aria-hidden="true" className="text-muted-foreground/50">·</span>
-                <span className="whitespace-nowrap">{formatPercent(entry.percentage)}</span>
+              <span className="whitespace-nowrap text-right font-semibold leading-snug text-foreground tabular-nums">
+                {formatPercent(entry.percentage)}
+              </span>
+              <span className="col-start-2 leading-snug text-muted-foreground tabular-nums">
+                <span className="whitespace-nowrap">
+                  {formatEmissions(entry.value, unit)}
+                </span>
               </span>
             </li>
           ))}

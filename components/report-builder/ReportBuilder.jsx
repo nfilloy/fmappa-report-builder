@@ -5,10 +5,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import {
   Download,
+  Expand,
   FileText,
-  Leaf,
   Loader2,
   Maximize2,
+  Shrink,
   UploadCloud,
   ZoomIn,
   ZoomOut,
@@ -26,14 +27,17 @@ import {
 } from "@/components/ui/tooltip";
 import { Typewriter } from "@/components/ui/typewriter-text";
 import { KpiCards } from "@/components/report-builder/KpiCards";
+import { ReportDownloadButton } from "@/components/report-builder/ReportDownloadButton";
 import { ScopeDonut } from "@/components/report-builder/charts/ScopeDonut";
 import { SiteEmissionsTable } from "@/components/report-builder/SiteEmissionsTable";
 import { TopCategories } from "@/components/report-builder/TopCategories";
 import { AppHeader } from "@/components/report-builder/workflow/AppHeader";
 import { WorkflowPanel } from "@/components/report-builder/workflow/WorkflowPanel";
+import { ColumnMappingPanel } from "@/components/report-builder/ColumnMappingPanel";
 import { HtmlReport } from "@/components/report-html/HtmlReport";
 import { buildReport } from "@/lib/data/detectReportType";
 import { DEFAULT_PCF_BOUNDARY } from "@/lib/data/pcf";
+import { applyColumnMapping } from "@/lib/data/schema";
 import { parseCsv } from "@/lib/data/parseCsv";
 import { formatPercent } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
@@ -46,8 +50,10 @@ import {
 import {
   applyPreset,
   buildReportSections,
+  buildReportTitle,
   createCustomSection,
   getSectionPresets,
+  regenerateSectionContent,
   removeSection,
   reorderSection,
   updateSection,
@@ -71,6 +77,18 @@ const HOW_IT_WORKS = [
 
 const A4_PAGE_WIDTH_PX = 794;
 const A4_PAGE_HEIGHT_PX = 1123;
+
+// Validation failures that should trigger the column-mapping recovery flow
+// (column-shaped problems), as opposed to a hard error like an empty CSV.
+const COLUMN_ERROR_PATTERN = /Missing required columns|Unrecognised CSV format/i;
+
+// Non-blocking summary of malformed-number warnings collected while building the
+// report model (A2). Cites the first offender as an example.
+function buildWarningMessage(warnings) {
+  const [first] = warnings;
+  const example = first ? ` (e.g. '${first.row}' → ${first.column})` : "";
+  return `${warnings.length} value(s) couldn't be read and were treated as 0${example}.`;
+}
 
 function buildKpis(report, accent) {
   if (!report) {
@@ -100,7 +118,10 @@ function buildKpis(report, accent) {
 
 const INITIAL_SETTINGS = {
   clientName: "RELATS S.A.U.",
-  reportLabel: "Organisational Carbon Footprint Report 2024",
+  reportLabel: buildReportTitle("ocf", "2024"),
+  // `reportLabel` is derived from kind + year unless the user edits it, at which
+  // point this flag pins their custom label across year changes.
+  reportLabelDirty: false,
   // The report is client-branded for Relats: default the accent to Relats'
   // corporate red. Uploading a client logo re-derives the accent from it.
   accentColor: RELATS_RED,
@@ -114,6 +135,10 @@ const INITIAL_SETTINGS = {
   reportingPeriod: "",
   notes: "",
   logoDataUrl: "",
+  // Data sources shown in the methodology badges / prose. Empty until a CSV is
+  // loaded, then defaulted to the report's per-kind sources (editable in the
+  // branding panel).
+  dataSources: [],
 };
 
 export function ReportBuilder() {
@@ -125,11 +150,16 @@ export function ReportBuilder() {
   const [dataset, setDataset] = useState(null);
   // PCF system boundary. OCF ignores it; the selector is PCF-only.
   const [boundary, setBoundary] = useState(DEFAULT_PCF_BOUNDARY);
+  // Set when an uploaded CSV fails validation on column issues, driving the
+  // inline column-mapping recovery panel: { kind, csvColumns, rows, fileName }.
+  const [mappingRequest, setMappingRequest] = useState(null);
   const [settings, setSettings] = useState(INITIAL_SETTINGS);
   const [loading, setLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [view, setView] = useState("document");
+  // Full-screen workspace overlay: edit panel + live preview fill the viewport.
+  const [expanded, setExpanded] = useState(false);
   const [previewWidth, setPreviewWidth] = useState(0);
   const [pageCount, setPageCount] = useState(1);
   // After an explicit section selection we programmatically smooth-scroll the
@@ -141,24 +171,144 @@ export function ReportBuilder() {
   // AnimatePresence transition and is not present on the first commit, so a plain
   // ref would still be null when the effect first runs.
   const [previewEl, setPreviewEl] = useState(null);
+  // Always-current settings, so callbacks with stable identities (ingest,
+  // boundary change, toggle, preset) can read the live client/year/data-sources
+  // metadata without listing `settings` as a dependency.
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+  // Same pattern for the report model, used by section-copy regeneration.
+  const reportRef = useRef(report);
+  useEffect(() => {
+    reportRef.current = report;
+  }, [report]);
 
-  const ingestCsv = useCallback((text, fileName) => {
-    const rows = parseCsv(text);
-    // A fresh dataset starts from the default boundary.
-    const nextBoundary = DEFAULT_PCF_BOUNDARY;
-    const nextReport = buildReport(rows, fileName, { boundary: nextBoundary });
-    const nextSections = buildReportSections(nextReport);
-    setDataset({ rows, fileName });
-    setBoundary(nextBoundary);
-    setReport(nextReport);
-    setSections(nextSections);
-    setSelectedSectionId(nextSections[0]?.id || "");
-    setView("document");
-    setSettings((currentSettings) => ({
-      ...currentSettings,
-      clientName: nextReport.clientName,
-      reportLabel: nextReport.reportTitle,
-    }));
+  // While the full-screen workspace overlay is open, close it on Escape and
+  // lock the page behind it from scrolling.
+  useEffect(() => {
+    if (!expanded) return undefined;
+    const onKey = (event) => {
+      if (event.key === "Escape") setExpanded(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [expanded]);
+
+  // Build a fresh section set whose generated copy reflects the current (or
+  // overridden) client name, reporting year and data sources.
+  const buildSectionsFor = useCallback((nextReport, overrides = {}) => {
+    const current = settingsRef.current;
+    return buildReportSections(nextReport, {
+      clientName: overrides.clientName ?? current.clientName,
+      reportYear: overrides.reportYear ?? current.reportYear,
+      dataSources: overrides.dataSources ?? current.dataSources,
+    });
+  }, []);
+
+  // Apply a successfully-built report model to the workspace. Shared by the
+  // direct upload path and the post-mapping rebuild so warnings, sections and
+  // settings all flow identically.
+  const applyReport = useCallback(
+    (nextReport, rows, fileName) => {
+      // A fresh dataset starts from the default boundary.
+      const nextBoundary = DEFAULT_PCF_BOUNDARY;
+      const reportYear = settingsRef.current.reportYear;
+      // New CSV resets the client name and data sources to this report's
+      // defaults, but keeps the user's reporting year so copy and cover stay in
+      // sync.
+      const nextSections = buildSectionsFor(nextReport, {
+        clientName: nextReport.clientName,
+        dataSources: nextReport.dataSources,
+      });
+      setMappingRequest(null);
+      setDataset({ rows, fileName });
+      setBoundary(nextBoundary);
+      setReport(nextReport);
+      setSections(nextSections);
+      setSelectedSectionId(nextSections[0]?.id || "");
+      setView("document");
+      setSettings((currentSettings) => ({
+        ...currentSettings,
+        clientName: nextReport.clientName,
+        reportLabel: buildReportTitle(nextReport.kind, reportYear),
+        reportLabelDirty: false,
+        dataSources: nextReport.dataSources,
+      }));
+
+      // Surface malformed-number warnings non-blockingly (A2).
+      if (nextReport.warnings?.length) {
+        toast.warning(buildWarningMessage(nextReport.warnings));
+      }
+    },
+    [buildSectionsFor],
+  );
+
+  const ingestCsv = useCallback(
+    (text, fileName) => {
+      const rows = parseCsv(text);
+      if (!rows.length) {
+        throw new Error("The CSV does not contain any data rows.");
+      }
+
+      let nextReport;
+      try {
+        nextReport = buildReport(rows, fileName, {
+          boundary: DEFAULT_PCF_BOUNDARY,
+        });
+      } catch (error) {
+        // Column-shaped failures open the mapping recovery panel; anything else
+        // (e.g. an empty CSV) propagates to the caller's error toast.
+        if (!COLUMN_ERROR_PATTERN.test(error.message)) {
+          throw error;
+        }
+        // Don't guess the schema: open the panel with no kind so the user
+        // explicitly picks OCF or PCF, then maps the columns.
+        setMappingRequest({
+          kind: null,
+          csvColumns: Object.keys(rows[0]),
+          rows,
+          fileName,
+        });
+        return;
+      }
+
+      applyReport(nextReport, rows, fileName);
+    },
+    [applyReport],
+  );
+
+  // Rebuild the report after the user maps the CSV columns onto a known schema.
+  // If it still fails to validate, keep the panel open and surface the reason.
+  const handleConfirmMapping = useCallback(
+    (mapping) => {
+      const request = mappingRequest;
+      if (!request) {
+        return;
+      }
+
+      const remappedRows = applyColumnMapping(request.rows, mapping);
+      try {
+        const nextReport = buildReport(remappedRows, request.fileName, {
+          boundary: DEFAULT_PCF_BOUNDARY,
+        });
+        applyReport(nextReport, remappedRows, request.fileName);
+      } catch (error) {
+        toast.error("The mapped columns still don't validate.", {
+          description: error.message,
+        });
+      }
+    },
+    [mappingRequest, applyReport],
+  );
+
+  const handleCancelMapping = useCallback(() => {
+    setMappingRequest(null);
   }, []);
 
   const resetReportState = useCallback(() => {
@@ -167,6 +317,7 @@ export function ReportBuilder() {
     setSelectedSectionId("");
     setDataset(null);
     setBoundary(DEFAULT_PCF_BOUNDARY);
+    setMappingRequest(null);
     setView("document");
   }, []);
 
@@ -181,13 +332,13 @@ export function ReportBuilder() {
       const nextReport = buildReport(dataset.rows, dataset.fileName, {
         boundary: nextBoundary,
       });
-      const nextSections = buildReportSections(nextReport);
+      const nextSections = buildSectionsFor(nextReport);
       setBoundary(nextBoundary);
       setReport(nextReport);
       setSections(nextSections);
       setSelectedSectionId(nextSections[0]?.id || "");
     },
-    [dataset, boundary],
+    [dataset, boundary, buildSectionsFor],
   );
 
   // Clicking the brand logo returns the app to its pristine landing state
@@ -306,15 +457,35 @@ export function ReportBuilder() {
     }
   }, [report, sections, settings]);
 
-  const handleToggleSection = useCallback((sectionId) => {
-    setSections((currentSections) =>
-      currentSections.map((section) =>
-        section.id === sectionId
-          ? { ...section, enabled: !section.enabled }
-          : section,
-      ),
+  // Regenerate the untouched (non-dirty) auto copy so cross-references stay
+  // consistent with whichever sections are currently enabled.
+  const regenerateForEnabled = useCallback((nextSections) => {
+    const current = settingsRef.current;
+    const enabledIds = new Set(
+      nextSections.filter((section) => section.enabled).map((section) => section.id),
     );
+    return regenerateSectionContent(nextSections, reportRef.current, {
+      clientName: current.clientName,
+      reportYear: current.reportYear,
+      dataSources: current.dataSources,
+      enabledIds,
+    });
   }, []);
+
+  const handleToggleSection = useCallback(
+    (sectionId) => {
+      setSections((currentSections) =>
+        regenerateForEnabled(
+          currentSections.map((section) =>
+            section.id === sectionId
+              ? { ...section, enabled: !section.enabled }
+              : section,
+          ),
+        ),
+      );
+    },
+    [regenerateForEnabled],
+  );
 
   const handleReorderSections = useCallback((nextSections) => {
     setSections(nextSections);
@@ -374,15 +545,27 @@ export function ReportBuilder() {
     });
   }, []);
 
-  const handleApplyPreset = useCallback((presetId) => {
-    setSections((currentSections) =>
-      applyPreset(currentSections, presetId, report?.kind),
-    );
-  }, [report?.kind]);
+  const handleApplyPreset = useCallback(
+    (presetId) => {
+      setSections((currentSections) =>
+        regenerateForEnabled(
+          applyPreset(currentSections, presetId, reportRef.current?.kind),
+        ),
+      );
+    },
+    [regenerateForEnabled],
+  );
 
   const handleUpdateSection = useCallback((sectionId, updates) => {
+    // A manual title/content edit pins the section so metadata or section-set
+    // changes no longer overwrite it.
+    const marksDirty = "content" in updates || "title" in updates;
     setSections((currentSections) =>
-      updateSection(currentSections, sectionId, updates),
+      updateSection(
+        currentSections,
+        sectionId,
+        marksDirty ? { ...updates, dirty: true } : updates,
+      ),
     );
   }, []);
 
@@ -391,10 +574,74 @@ export function ReportBuilder() {
       return;
     }
 
-    const restoredSections = buildReportSections(report);
+    // Restore discards manual edits and regenerates every section from the
+    // current metadata.
+    const restoredSections = buildSectionsFor(report);
     setSections(restoredSections);
     setSelectedSectionId(restoredSections[0]?.id || "");
-  }, [report]);
+  }, [report, buildSectionsFor]);
+
+  // Wraps `setSettings`: keeps the derived report title in sync with the year
+  // (until the user pins a custom label) and supports the functional updates the
+  // colour picker uses. Section copy is regenerated by the effect below.
+  const handleSettingsChange = useCallback((update) => {
+    setSettings((prev) => {
+      const next = typeof update === "function" ? update(prev) : update;
+      if (
+        reportRef.current &&
+        next.reportYear !== prev.reportYear &&
+        !next.reportLabelDirty
+      ) {
+        return {
+          ...next,
+          reportLabel: buildReportTitle(reportRef.current.kind, next.reportYear),
+        };
+      }
+      return next;
+    });
+  }, []);
+
+  // Regenerate untouched section copy when the client name, reporting year or
+  // data sources change, so the narrative tracks the form (the cover already
+  // reads settings live). Manual edits (dirty sections) are preserved. A report
+  // (re)load / boundary change resets the baseline without regenerating, since
+  // those paths already build fresh sections.
+  const metaBaselineRef = useRef({ report: null, key: "" });
+  useEffect(() => {
+    if (!report) {
+      metaBaselineRef.current = { report: null, key: "" };
+      return;
+    }
+
+    const key = [
+      settings.clientName,
+      settings.reportYear,
+      (settings.dataSources || []).join(""),
+    ].join(" ");
+    const baseline = metaBaselineRef.current;
+
+    if (baseline.report !== report) {
+      metaBaselineRef.current = { report, key };
+      return;
+    }
+    if (baseline.key === key) {
+      return;
+    }
+
+    metaBaselineRef.current = { report, key };
+    setSections((current) =>
+      regenerateSectionContent(current, report, {
+        clientName: settings.clientName,
+        reportYear: settings.reportYear,
+        dataSources: settings.dataSources,
+        enabledIds: new Set(
+          current
+            .filter((section) => section.enabled)
+            .map((section) => section.id),
+        ),
+      }),
+    );
+  }, [report, settings.clientName, settings.reportYear, settings.dataSources]);
 
   const scrollPreviewToSection = useCallback(
     (sectionId) => {
@@ -542,10 +789,18 @@ export function ReportBuilder() {
     [report],
   );
 
+  // Pristine landing: no report and no in-progress column mapping. Drives the
+  // single centered upload layout (no empty placeholder, fits the viewport).
+  const isLanding = !report && !mappingRequest;
+
+  // The full-screen workspace only makes sense once a report exists, so gate the
+  // overlay on that to avoid a stuck empty overlay if the report is cleared.
+  const isExpanded = expanded && Boolean(report);
+
   return (
     <TooltipProvider delayDuration={200}>
       <Toaster />
-      <main className="app-dune-bg min-h-screen overflow-x-clip text-foreground">
+      <main className="app-dune-bg min-h-dvh overflow-x-clip text-foreground">
       <AppHeader
         enabledCount={enabledSectionCount}
         onDownload={handleDownloadPdf}
@@ -557,10 +812,12 @@ export function ReportBuilder() {
       />
       <section
         className={cn(
-          "mx-auto w-full max-w-6xl px-4 sm:px-8",
-          report
-            ? "py-8"
-            : "flex min-h-dvh flex-col py-[clamp(1rem,2.5vh,2rem)]",
+          isExpanded
+            ? "app-dune-surface fixed inset-0 z-50 w-full overflow-hidden px-4 py-4 sm:px-8"
+            : cn(
+                "mx-auto w-full max-w-6xl px-4 sm:px-8",
+                isLanding ? "py-[clamp(1rem,2.5vh,2rem)]" : "py-8",
+              ),
         )}
       >
         {!report ? (
@@ -630,16 +887,18 @@ export function ReportBuilder() {
 
         <div
           className={cn(
-            "grid min-w-0 gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]",
-            report
-              ? "py-8"
-              : "min-h-0 flex-1 py-[clamp(1rem,2.5vh,2rem)] lg:[grid-template-rows:minmax(0,1fr)]",
+            "min-w-0",
+            isLanding
+              ? "mx-auto w-full max-w-xl"
+              : isExpanded
+                ? "grid h-[calc(100dvh-2rem)] grid-rows-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]"
+                : "grid gap-6 py-8 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]",
           )}
         >
           <aside
             className={cn(
               "min-w-0 space-y-4",
-              report ? null : "lg:flex lg:h-full lg:flex-col lg:gap-4 lg:space-y-0",
+              isExpanded && "min-h-0",
             )}
           >
             <WorkflowPanel
@@ -665,7 +924,8 @@ export function ReportBuilder() {
               sections={sections}
               selectedSectionId={selectedSectionId}
               settings={settings}
-              setSettings={setSettings}
+              setSettings={handleSettingsChange}
+              fill={isExpanded}
             />
             {loading ? (
               <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
@@ -675,18 +935,29 @@ export function ReportBuilder() {
             ) : null}
           </aside>
 
+          {!isLanding ? (
           <AnimatePresence mode="wait">
             {report ? (
               <motion.div
                 key="report"
-                className="min-w-0"
+                  className={cn("min-w-0", isExpanded && "h-full min-h-0")}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.35, ease: "easeOut" }}
               >
-                <Card className="min-w-0 overflow-hidden">
-                  <CardHeader className="gap-4 border-b border-border/70 bg-card/95 pb-4">
+                <Card
+                  className={cn(
+                    "min-w-0 overflow-hidden",
+                    isExpanded && "flex h-full flex-col",
+                  )}
+                >
+                  <CardHeader
+                    className={cn(
+                      "gap-4 border-b border-border/70 bg-card/95 pb-4",
+                      isExpanded && "shrink-0",
+                    )}
+                  >
                     <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
                         <Tabs
@@ -710,6 +981,12 @@ export function ReportBuilder() {
                         </div>
                       </div>
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        {isExpanded ? (
+                          <ReportDownloadButton
+                            onDownload={handleDownloadPdf}
+                            pdfLoading={pdfLoading}
+                          />
+                        ) : null}
                         {view === "document" ? (
                           <div className="flex shrink-0 items-center gap-1 rounded-lg border border-border bg-card p-1">
                             <Tooltip>
@@ -762,17 +1039,50 @@ export function ReportBuilder() {
                             </Tooltip>
                           </div>
                         ) : null}
+                        <div className="flex shrink-0 items-center gap-1 rounded-lg border border-border bg-card p-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                aria-label={
+                                  expanded ? "Contraer vista" : "Expandir vista"
+                                }
+                                aria-pressed={expanded}
+                                onClick={() => setExpanded((value) => !value)}
+                                size="icon"
+                                type="button"
+                                variant="ghost"
+                              >
+                                {expanded ? (
+                                  <Shrink aria-hidden="true" />
+                                ) : (
+                                  <Expand aria-hidden="true" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {expanded
+                                ? "Contraer vista"
+                                : "Expandir a pantalla completa"}
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
                       </div>
                     </div>
                   </CardHeader>
 
                   {view === "summary" ? (
-                    <CardContent className="bg-secondary/30 p-4 sm:p-5">
+                    <CardContent
+                      className={cn(
+                        "bg-secondary/30 p-4 sm:p-5",
+                        isExpanded && "min-h-0 flex-1 overflow-auto",
+                      )}
+                    >
                       <div className="min-w-0 space-y-6">
                         <KpiCards kpis={kpis} unit={report.unit} />
                         <div className="grid min-w-0 items-start gap-6 xl:grid-cols-2">
                           <ScopeDonut
                             breakdown={report.breakdown}
+                            expanded={isExpanded}
                             total={report.total.totalEmissions}
                             title={report.breakdownTitle}
                             unit={report.unit}
@@ -796,10 +1106,17 @@ export function ReportBuilder() {
                       </div>
                     </CardContent>
                   ) : (
-                    <CardContent className="p-0">
+                    <CardContent
+                      className={cn("p-0", isExpanded && "min-h-0 flex-1")}
+                    >
                       <div
                         ref={setPreviewEl}
-                        className="report-preview-viewport max-h-[calc(100dvh-12rem)] min-h-[520px] overflow-auto p-4 sm:p-6"
+                        className={cn(
+                          "report-preview-viewport min-h-[520px] overflow-auto p-4 sm:p-6",
+                          isExpanded
+                            ? "h-full max-h-none"
+                            : "max-h-[calc(100dvh-12rem)]",
+                        )}
                       >
                         <style>{HTML_REPORT_STYLES}</style>
                         <style>{HTML_REPORT_PREVIEW_STYLES}</style>
@@ -859,30 +1176,24 @@ export function ReportBuilder() {
                   )}
                 </Card>
               </motion.div>
-            ) : (
+            ) : mappingRequest ? (
               <motion.div
-                key="empty"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
+                key="mapping"
+                className="min-w-0"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className="flex h-full min-h-[clamp(220px,32vh,440px)] items-center justify-center rounded-2xl border border-dashed border-border bg-secondary/30 p-8 text-center"
+                transition={{ duration: 0.35, ease: "easeOut" }}
               >
-                <div>
-                  <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <Leaf aria-hidden="true" className="h-7 w-7" />
-                  </span>
-                  <h2 className="mt-5 text-xl font-semibold text-foreground">
-                    No report loaded
-                  </h2>
-                  <p className="mt-3 max-w-md text-sm leading-6 text-muted-foreground">
-                    Upload an OCF or PCF CSV (or load a sample) to preview totals,
-                    breakdowns, per-entity emissions and category hotspots.
-                  </p>
-                </div>
+                <ColumnMappingPanel
+                  request={mappingRequest}
+                  onConfirm={handleConfirmMapping}
+                  onCancel={handleCancelMapping}
+                />
               </motion.div>
-            )}
+            ) : null}
           </AnimatePresence>
+          ) : null}
         </div>
       </section>
       </main>

@@ -242,12 +242,16 @@ function CategoryTablesReport({ report }) {
   );
 }
 
-function MethodologyBadges({ report }) {
+function MethodologyBadges({ report, dataSources }) {
+  const sources =
+    Array.isArray(dataSources) && dataSources.length
+      ? dataSources
+      : report.dataSources;
   return (
     <div className="method-badges">
       <span className="method-badge method-badge--accent">{report.standardLong}</span>
       <span className="method-badge">{report.ghgProtocol}</span>
-      {report.dataSources.map((source) => (
+      {sources.map((source) => (
         <span className="method-badge" key={source}>
           {source}
         </span>
@@ -358,7 +362,7 @@ function RecommendationsReport({ section, editable, onUpdateSection }) {
   );
 }
 
-function SectionBody({ section, report, editable, onUpdateSection }) {
+function SectionBody({ section, report, dataSources, editable, onUpdateSection }) {
   const editProps = { editable, onUpdateSection };
 
   if (section.type === "metrics") {
@@ -417,7 +421,9 @@ function SectionBody({ section, report, editable, onUpdateSection }) {
   return (
     <>
       <TextReport section={section} {...editProps} />
-      {section.id === "methodology" ? <MethodologyBadges report={report} /> : null}
+      {section.id === "methodology" ? (
+        <MethodologyBadges report={report} dataSources={dataSources} />
+      ) : null}
     </>
   );
 }
@@ -452,6 +458,10 @@ export function HtmlReport({
   const totalSourceLabel = settings?.totalSourceLabel || report.totalSourceLabel;
   const notes = settings?.notes || "";
   const logoDataUrl = settings?.logoDataUrl || "";
+  const dataSources =
+    Array.isArray(settings?.dataSources) && settings.dataSources.length
+      ? settings.dataSources
+      : report.dataSources;
   const visibleSections = enabledSections(sections);
   const eyebrow = [`Prepared by ${preparedBy}`];
   if (preparedFor) eyebrow.push(`Prepared for ${preparedFor}`);
@@ -567,6 +577,7 @@ export function HtmlReport({
           <SectionBody
             section={section}
             report={report}
+            dataSources={dataSources}
             editable={editable}
             onUpdateSection={onUpdateSection}
           />

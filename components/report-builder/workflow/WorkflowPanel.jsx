@@ -65,6 +65,7 @@ export function WorkflowPanel({
   selectedSectionId,
   settings,
   setSettings,
+  fill = false,
 }) {
   // A single active workspace at a time — a vertical icon rail switches between
   // them (not a step wizard: any order, no next/back). One panel visible keeps
@@ -75,24 +76,35 @@ export function WorkflowPanel({
   // Before any CSV is loaded the panel is just the upload affordance.
   if (!report) {
     return (
-      <Card className="sticky top-20 min-w-0 overflow-hidden">
-        <div className="p-4">
-          <FileUpload
-            onFileSelected={onFileSelected}
-            onLoadSampleOcf={onLoadSampleOcf}
-            onLoadSamplePcf={onLoadSamplePcf}
-            fileName={report?.fileName}
-            fill
-          />
-        </div>
-      </Card>
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: 0.36 }}
+      >
+        <Card className="min-w-0 overflow-hidden border-border/60 bg-card/70 backdrop-blur-sm">
+          <div className="p-4">
+            <FileUpload
+              onFileSelected={onFileSelected}
+              onLoadSampleOcf={onLoadSampleOcf}
+              onLoadSamplePcf={onLoadSamplePcf}
+              fileName={report?.fileName}
+              fill
+            />
+          </div>
+        </Card>
+      </motion.div>
     );
   }
 
   const activeTab = TABS.find((tab) => tab.id === active) ?? TABS[0];
 
   return (
-    <Card className="sticky top-20 flex min-w-0 overflow-hidden">
+    <Card
+      className={cn(
+        "flex min-w-0 overflow-hidden",
+        fill ? "h-full" : "sticky top-20",
+      )}
+    >
       {/* Icon rail */}
       <div className="flex shrink-0 flex-col items-center gap-1.5 border-r border-border/60 bg-secondary/40 p-2">
         {TABS.map((tab) => {
@@ -152,7 +164,12 @@ export function WorkflowPanel({
             </span>
           ) : null}
         </div>
-        <div className="min-w-0 flex-1 overflow-y-auto p-4 [scrollbar-gutter:stable] max-h-[calc(100dvh-9rem)]">
+        <div
+          className={cn(
+            "min-w-0 flex-1 overflow-y-auto p-4 [scrollbar-gutter:stable]",
+            fill ? "min-h-0" : "max-h-[calc(100dvh-9rem)]",
+          )}
+        >
           <AnimatePresence mode="wait">
             <motion.div
               animate={{ opacity: 1, y: 0 }}

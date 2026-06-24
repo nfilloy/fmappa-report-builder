@@ -1,5 +1,6 @@
 node_modules
 .next
+.next-e2e
 out
 build
 .env*
@@ -15,3 +16,4 @@ output/
 ESPECIFICACION_RETO_TECNICO*.md
 documentacion/
 .playwright-mcp/
+tmp/

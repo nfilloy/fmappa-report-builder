@@ -31,8 +31,8 @@ function CountUp({ value, unit }) {
   // Keep the number on a single line (never break mid-figure); the unit can
   // wrap to its own line and sits a touch smaller for hierarchy.
   return (
-    <span className="flex min-w-0 max-w-full flex-wrap items-baseline gap-x-1.5 [overflow-wrap:anywhere]">
-      <span className="min-w-0 max-w-full break-words">{formatNumber(shown / divisor)}</span>
+    <span className="flex min-w-0 max-w-full flex-wrap items-baseline gap-x-1.5">
+      <span className="whitespace-nowrap">{formatNumber(shown / divisor)}</span>
       <span className="min-w-0 break-words text-sm font-semibold text-muted-foreground">
         {suffix}
       </span>
@@ -77,7 +77,7 @@ export const KpiCards = memo(function KpiCards({ kpis, unit }) {
                   {kpi.label}
                 </p>
               </div>
-              <div className="mt-4 min-w-0 max-w-full text-[clamp(1.35rem,1rem+0.8vw,1.75rem)] font-bold leading-tight text-foreground tabular-nums">
+              <div className="mt-4 min-w-0 max-w-full [container-type:inline-size] text-[clamp(1rem,18cqi,1.75rem)] font-bold leading-tight text-foreground tabular-nums">
                 <CountUp value={kpi.value} unit={unit} />
               </div>
               <p className="mt-2 min-w-0 break-words text-sm text-muted-foreground">

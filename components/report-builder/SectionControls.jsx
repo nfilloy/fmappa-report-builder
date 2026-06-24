@@ -34,6 +34,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { InfoHint } from "@/components/ui/info-hint";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -204,8 +205,12 @@ export const SectionList = memo(function SectionList({
     <div className="flex min-h-0 min-w-0 flex-col gap-4">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
             Document outline
+            <InfoHint label="About the document outline">
+              Drag to reorder sections and use the eye toggle to include or hide
+              each one from the exported PDF.
+            </InfoHint>
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
             {enabledCount} of {sections.length} included in PDF
@@ -229,22 +234,31 @@ export const SectionList = memo(function SectionList({
 
       <details className="group min-w-0 rounded-lg border border-border bg-secondary/30 p-3">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-foreground">
-          Templates
+          <span className="flex items-center gap-1.5">
+            Templates
+            <InfoHint label="About templates">
+              One-click section presets — e.g. a full consulting report, a short
+              executive brief or a compliance set — applied to the outline.
+            </InfoHint>
+          </span>
           <ChevronDown
             aria-hidden="true"
             className="h-4 w-4 text-muted-foreground transition group-open:rotate-180"
           />
         </summary>
-        <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+        <div className="mt-3 flex min-w-0 flex-col gap-2">
           {Object.entries(presets).map(([presetId, preset]) => (
             <Button
+              className="h-auto w-full flex-col items-start gap-0.5 whitespace-normal py-2 text-left"
               key={presetId}
               onClick={() => onApplyPreset(presetId)}
-              size="sm"
               type="button"
               variant="outline"
             >
-              {preset.label}
+              <span className="font-medium">{preset.label}</span>
+              <span className="text-xs text-muted-foreground">
+                {preset.description}
+              </span>
             </Button>
           ))}
         </div>

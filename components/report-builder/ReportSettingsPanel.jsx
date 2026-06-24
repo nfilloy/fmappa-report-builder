@@ -5,6 +5,7 @@ import { Check, ImagePlus, Layers, Palette, RefreshCw, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { InfoHint } from "@/components/ui/info-hint";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,44 @@ const ACCENT_PRESETS = [
 function normalizeHex(value) {
   const hex = String(value ?? "").trim().replace(/^#/, "");
   return /^[0-9a-fA-F]{6}$/.test(hex) ? `#${hex.toLowerCase()}` : null;
+}
+
+// Parse a comma-separated string into a trimmed, non-empty list of sources.
+function parseSources(text) {
+  return String(text ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+// Comma-separated editor for the data-sources list. Keeps a local text buffer so
+// the user can type commas freely; the parsed array is propagated on every
+// change, and the buffer re-syncs when the external value changes (CSV load /
+// reset) without clobbering mid-edit. Resync is done during render (React's
+// recommended pattern) rather than in an effect.
+function DataSourcesField({ value, onChange }) {
+  const joined = (value || []).join(", ");
+  const [text, setText] = useState(joined);
+  const [lastJoined, setLastJoined] = useState(joined);
+
+  if (joined !== lastJoined) {
+    setLastJoined(joined);
+    if (parseSources(text).join(", ") !== joined) {
+      setText(joined);
+    }
+  }
+
+  return (
+    <Input
+      className="mt-2"
+      onChange={(event) => {
+        setText(event.target.value);
+        onChange(parseSources(event.target.value));
+      }}
+      placeholder="DEFRA, IEA, ecoinvent"
+      value={text}
+    />
+  );
 }
 
 export const ReportSettingsPanel = memo(function ReportSettingsPanel({
@@ -151,6 +190,11 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({
                 <Layers aria-hidden="true" className="h-4 w-4" />
               </span>
               <p className="text-sm font-semibold text-foreground">System boundary</p>
+              <InfoHint label="About the system boundary">
+                Cradle-to-gate counts raw materials, manufacturing and inbound
+                transport up to the factory gate; cradle-to-grave adds the
+                downstream distribution, use and end-of-life stages.
+              </InfoHint>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
               PCF reporting boundary. Changing it recomputes the footprint and
@@ -184,7 +228,13 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({
           </div>
         ) : null}
         <label className="block text-sm font-medium text-foreground">
-          Client name
+          <span className="flex items-center gap-1.5">
+            Client name
+            <InfoHint label="About the client name">
+              The company the report is prepared for. It appears on the cover and
+              flows through the generated narrative copy.
+            </InfoHint>
+          </span>
           <Input
             className="mt-2"
             onChange={(event) => updateSetting("clientName", event.target.value)}
@@ -195,13 +245,26 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({
           Report label
           <Input
             className="mt-2"
-            onChange={(event) => updateSetting("reportLabel", event.target.value)}
+            onChange={(event) =>
+              onChange({
+                ...settings,
+                reportLabel: event.target.value,
+                // Pin the custom label so it survives later year changes.
+                reportLabelDirty: true,
+              })
+            }
             value={settings.reportLabel}
           />
         </label>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm font-medium text-foreground">
-            Report year
+            <span className="flex items-center gap-1.5">
+              Report year
+              <InfoHint label="About the report year">
+                The reporting period covered. It drives the report title, cover
+                and page headers unless you pin a custom label.
+              </InfoHint>
+            </span>
             <Input
               className="mt-2"
               onChange={(event) => updateSetting("reportYear", event.target.value)}
@@ -265,6 +328,22 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({
             placeholder="Leave blank to use the detected basis."
             value={settings.totalSourceLabel || ""}
           />
+        </label>
+        <label className="block text-sm font-medium text-foreground">
+          <span className="flex items-center gap-1.5">
+            Data sources
+            <InfoHint label="About data sources">
+              Emission-factor databases behind the figures (e.g. DEFRA,
+              ecoinvent). Shown in the methodology badges and prose.
+            </InfoHint>
+          </span>
+          <DataSourcesField
+            onChange={(sources) => updateSetting("dataSources", sources)}
+            value={settings.dataSources}
+          />
+          <span className="mt-1 block text-xs font-normal text-muted-foreground">
+            Comma-separated. Shown in the methodology badges and prose.
+          </span>
         </label>
         <label className="block text-sm font-medium text-foreground">
           Notes / assumptions
@@ -352,6 +431,11 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({
               <Palette aria-hidden="true" className="h-4 w-4" />
             </span>
             <p className="text-sm font-semibold text-foreground">Accent color</p>
+            <InfoHint label="About the accent color">
+              Brand accent for the exported report cover, headings and badges.
+              Derived from the client logo when one is uploaded. Data charts keep
+              the fixed Mappa palette for legibility.
+            </InfoHint>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             Brand accent of the exported report (cover, headings, badges). Charts
@@ -428,6 +512,47 @@ export const ReportSettingsPanel = memo(function ReportSettingsPanel({
             })}
           </div>
         </div>
+
+        <details className="group min-w-0 rounded-xl border border-border bg-secondary/40 p-4">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-semibold text-foreground">
+            Glossary
+            <span className="text-xs font-normal text-muted-foreground">
+              key terms
+            </span>
+          </summary>
+          <dl className="mt-3 space-y-2 text-xs leading-snug text-muted-foreground">
+            <div>
+              <dt className="font-semibold text-foreground">Scope 1 / 2 / 3</dt>
+              <dd>
+                Direct emissions (Scope 1), purchased energy (Scope 2) and wider
+                value-chain emissions (Scope 3).
+              </dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-foreground">
+                Cradle-to-gate vs cradle-to-grave
+              </dt>
+              <dd>
+                Up to the factory gate vs the full life cycle including
+                distribution, use and end of life.
+              </dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-foreground">Functional unit</dt>
+              <dd>
+                The reference flow a product&apos;s emissions are measured
+                against, so different products stay comparable.
+              </dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-foreground">CO₂e</dt>
+              <dd>
+                Carbon-dioxide equivalent — all greenhouse gases expressed on a
+                common warming-potential scale.
+              </dd>
+            </div>
+          </dl>
+        </details>
     </div>
   );
 

@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { createServer } from "node:net";
 import { join } from "node:path";
 import test from "node:test";
 
 import { chromium } from "playwright";
 
-const PORT = 3210;
-const BASE_URL = `http://127.0.0.1:${PORT}`;
 const EXTERNAL_TEST_URL = process.env.RESPONSIVE_TEST_URL || "";
 const VIEWPORTS = [
   { width: 320, height: 900 },
@@ -20,6 +19,20 @@ const SAMPLE_CSV = join(process.cwd(), "data", "sample_ocf_iso_14064.csv");
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Grab an ephemeral free port from the OS so the E2E never collides with a dev
+// server (or another test run) already holding a fixed port.
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const srv = createServer();
+    srv.unref();
+    srv.on("error", reject);
+    srv.listen(0, "127.0.0.1", () => {
+      const { port } = srv.address();
+      srv.close(() => resolve(port));
+    });
+  });
 }
 
 async function waitForServer(url, getLogs, timeoutMs = 60000) {
@@ -41,12 +54,18 @@ async function waitForServer(url, getLogs, timeoutMs = 60000) {
   throw new Error(`Server did not start at ${url}\n${getLogs()}`);
 }
 
-function startNext() {
+function startNext(port) {
   const nextBin = join(process.cwd(), "node_modules", "next", "dist", "bin", "next");
   const mode = "dev";
-  const child = spawn(process.execPath, [nextBin, mode, "-p", String(PORT), "-H", "127.0.0.1"], {
+  const child = spawn(process.execPath, [nextBin, mode, "-p", String(port), "-H", "127.0.0.1"], {
     cwd: process.cwd(),
-    env: { ...process.env, NEXT_TELEMETRY_DISABLED: "1" },
+    env: {
+      ...process.env,
+      NEXT_TELEMETRY_DISABLED: "1",
+      // Isolated build dir → isolated dev lock, so this server coexists with a
+      // dev server already running against the default `.next`.
+      NEXT_DIST_DIR: ".next-e2e",
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   const logs = [];
@@ -63,6 +82,21 @@ function startNext() {
     child,
     logs: () => logs.join(""),
   };
+}
+
+// Boots a Next dev server on a runtime-resolved free port (or honours
+// RESPONSIVE_TEST_URL) and hands back the base URL plus a teardown.
+async function bootApp() {
+  if (EXTERNAL_TEST_URL) {
+    return { baseUrl: EXTERNAL_TEST_URL, stop: () => {} };
+  }
+
+  const port = await getFreePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const server = startNext(port);
+  await waitForServer(baseUrl, server.logs);
+
+  return { baseUrl, stop: () => server.child.kill() };
 }
 
 async function findHorizontalOverflow(page) {
@@ -128,20 +162,15 @@ async function findHorizontalOverflow(page) {
 }
 
 test("report builder stays within the viewport across responsive widths", async () => {
-  const server = EXTERNAL_TEST_URL ? null : startNext();
-  const baseUrl = EXTERNAL_TEST_URL || BASE_URL;
+  const app = await bootApp();
   let browser;
 
   try {
-    if (server) {
-      await waitForServer(baseUrl, server.logs);
-    }
-
     browser = await chromium.launch({ headless: true });
 
     for (const viewport of VIEWPORTS) {
       const page = await browser.newPage({ viewport });
-      await page.goto(baseUrl, { waitUntil: "networkidle" });
+      await page.goto(app.baseUrl, { waitUntil: "networkidle" });
       await page
         .getByLabel(/upload ocf or pcf csv file/i)
         .setInputFiles(SAMPLE_CSV);
@@ -159,23 +188,18 @@ test("report builder stays within the viewport across responsive widths", async 
     }
   } finally {
     await browser?.close();
-    server?.child.kill();
+    app.stop();
   }
 });
 
 test("section outline edits the live document preview", async () => {
-  const server = EXTERNAL_TEST_URL ? null : startNext();
-  const baseUrl = EXTERNAL_TEST_URL || BASE_URL;
+  const app = await bootApp();
   let browser;
 
   try {
-    if (server) {
-      await waitForServer(baseUrl, server.logs);
-    }
-
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
-    await page.goto(baseUrl, { waitUntil: "networkidle" });
+    await page.goto(app.baseUrl, { waitUntil: "networkidle" });
     await page
       .getByLabel(/upload ocf or pcf csv file/i)
       .setInputFiles(SAMPLE_CSV);
@@ -206,6 +230,6 @@ test("section outline edits the live document preview", async () => {
       .waitFor({ timeout: 5000 });
   } finally {
     await browser?.close();
-    server?.child.kill();
+    app.stop();
   }
 });
