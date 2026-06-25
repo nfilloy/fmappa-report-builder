@@ -10,23 +10,24 @@ Uploaded files are parsed client-side. The app does not store or persist the CSV
 
 ## Chosen Path
 
-I started with **Path A: Foundation** and evolved it into a **Path B: Customizable** report builder.
+I started with **Path A: Foundation** and evolved it into a **Path B: Customizable** report builder. The brief states that a strong Path A beats a weak Path C, so I invested in a solid, configurable Path B and left Path C (runtime AI) documented rather than half-built — the product value here is in **configurability and genericity**, not in a fragile AI demo.
 
-The implementation supports OCF and PCF sample data. The report is represented as configurable sections with basic branding controls, rendered as an HTML preview, and exported to PDF through a minimal Chromium-backed API route.
+The central angle is **genericity**: the tool is correct for *any* client, reporting year and dataset, not just the bundled Relats sample. OCF and PCF are auto-detected and normalised; the client name, reporting year and data sources are a single source of truth that flows into the cover and the auto-generated narrative; the generated copy carries no hardwired client claims; and a renamed/odd CSV is recovered through column mapping rather than failing silently. The report is a configurable list of sections (with templates and branding), rendered as an HTML preview and exported to PDF through a minimal Chromium-backed API route.
 
-I intentionally did not implement database persistence, authentication, full template editing, DOCX export, or runtime AI integration in this MVP. Path C remains a documented future evolution over the section model.
+I intentionally did **not** implement database persistence, authentication, free-form template authoring, DOCX export, or runtime AI integration in this MVP. Path C remains a documented future evolution over the same section model.
 
 ## Stack
 
-- Next.js 16
+- Next.js 16 (App Router)
 - React 19
-- App Router
 - JavaScript / JSX
 - Tailwind CSS v4
-- shadcn/ui style primitives
-- Radix UI
-- Lucide icons
-- Puppeteer + serverless Chromium for PDF export
+- shadcn/ui style primitives + Radix UI (tooltip, slot)
+- Lucide icons, Framer Motion (transitions), Sonner (toasts)
+- `@dnd-kit` for section drag-and-drop reordering
+- Recharts for the interactive **Summary** view charts
+- Hand-written inline **SVG** charts for the **report/PDF** (`lib/report/svgCharts.js`) — the same SVG string renders identically in the browser preview and in the server-side render, so charts never depend on a client charting library hydrating inside Chromium
+- Puppeteer (`puppeteer-core` + `@sparticuz/chromium-min`) for PDF export
 - Playwright for responsive E2E tests
 
 ## How To Run
@@ -135,6 +136,16 @@ Changing the boundary triggers a **full recompute** of the report model (total, 
 
 > **Known limitation:** a **boundary change** and the **Restore default sections** action fully regenerate the auto-generated section text, so manual edits to section copy are **not preserved** across those two actions — set the boundary first, then edit copy. (Editing client name, reporting year or data sources does preserve manual edits — see *Genericity* below.)
 
+## Templates (section presets)
+
+The report is a **configurable list of sections**: each can be enabled, disabled, reordered (arrows or drag-and-drop) and edited in place, and custom sections can be added or duplicated. Three **templates** preset which sections are included, defined as data in `SECTION_PRESETS_BY_KIND` (`lib/report/sections.js`) and available for both OCF and PCF:
+
+- **Consulting full report** (default) — the complete client deliverable: executive summary, introduction, methodology, boundaries, results, charts, detailed category/lifecycle tables, narrative analysis, key insights, conclusions, strategic recommendations and limitations.
+- **Executive brief** — leadership-facing: executive summary, global results, the scope/lifecycle chart and key insights only.
+- **Compliance** — audit/verification-facing: methodology, boundaries, results, the entity/product table and detailed tables, with no narrative.
+
+Applying a template (`applyPreset`) reorders the included sections, disables the rest and **keeps any custom sections**; the index ("Included sections") and section numbering recompute automatically because the report only renders the enabled sections in order. Switching templates also refreshes the auto-generated cross-references so the copy never mentions analysis a template omits (see *Genericity* — e.g. the Executive brief drops the site/category pointers).
+
 ## Genericity (client / year / data sources as one source of truth)
 
 The report is correct for **any** client, reporting year and dataset, not just the bundled sample:
@@ -170,19 +181,14 @@ To apply real Relats identity, upload the Relats logo in the branding panel (or 
 
 ## What The App Does
 
-- Accepts a `.csv` file from the browser.
-- Validates the minimum OCF schema.
-- Parses and normalises the CSV client-side.
-- Shows total emissions, Scope 1, Scope 2 and Scope 3 KPIs.
-- Shows scope breakdown percentages.
-- Shows site emissions by plant.
-- Shows the largest Scope 3 categories.
-- Builds a consulting-style section-based report model.
-- Allows sections to be enabled, disabled and reordered.
-- Adds editable narrative sections for introduction, methodology, comparative analysis, conclusions and strategic recommendations.
-- Allows basic report branding configuration.
-- Renders an editable A4-style HTML report preview as the source of truth.
-- Generates a downloadable PDF from that HTML preview through `/api/pdf`.
+- Accepts a `.csv` file (or a bundled sample) from the browser and parses/normalises it **client-side** — nothing is persisted.
+- **Auto-detects OCF vs PCF** from the headers and validates the relevant schema; on a column-shaped failure it opens the **column-mapping recovery panel** instead of erroring out.
+- Builds the normalised model: total emissions and Scope 1/2/3 (OCF) or lifecycle-stage (PCF) KPIs, breakdown percentages, per-site / per-product table, top hotspots and detailed category tables.
+- Renders a consulting-style **section-based report model** with three **templates**; sections can be enabled, disabled, reordered (arrows / drag-and-drop), edited in place, added, duplicated and restored.
+- Generates editable narrative copy (introduction, methodology, boundaries, analysis, conclusions, recommendations, limitations) that tracks the client name, reporting year and data sources.
+- Lets the user switch the **PCF system boundary** (cradle-to-gate / cradle-to-grave) and recomputes the whole model.
+- Applies **branding** (default Relats accent, optional uploaded logo → derived accent, fixed Mappa chart palette).
+- Renders an editable A4-style HTML report preview as the source of truth, and generates a downloadable PDF from the same model through `/api/pdf`.
 
 ## PDF Strategy
 
@@ -219,59 +225,54 @@ The PDF endpoint accepts the final report model, including configurable sections
 
 ## Build / Reuse / Buy
 
-- **Build:** CSV parser, OCF normalisation, report section model, section toggles, basic branding controls and preview UI.
-- **Reuse:** Next.js, React, Tailwind, shadcn-style UI conventions, Lucide icons and browser File APIs.
-- **Adopt:** Chromium-based HTML-to-PDF export instead of building a custom PDF engine.
+The PDF approach was chosen after a written comparison — see `documentacion/pdf-generation-options.md` (option matrix) and `documentacion/pdf-technology-recommendation.md` (recommendation per path).
+
+- **Build:** CSV parser + delimiter detection, OCF/PCF normalisation, the report section model, templates, branding controls, inline SVG report charts and the preview UI.
+- **Reuse:** Next.js, React, Tailwind, shadcn-style UI conventions, Radix/Lucide and browser File APIs.
+- **Adopt:** Chromium-based HTML-to-PDF export (Puppeteer) instead of building a custom PDF engine.
 
 Alternatives considered:
 
-- `pdf-lib`: lower-level and better for editing existing PDFs, but too manual for report layout.
-- `jsPDF`: simple for basic PDFs, but weaker for React-style document composition.
-- `@react-pdf/renderer`: good for Path A, but less natural for configurable HTML preview + branding controls.
-- `pdfme`: strong for client-configurable templates, but heavier than needed for this first Path B iteration.
-- PrinceXML / DocRaptor: strong production buy options, but too heavy for this MVP and introduce cost or vendor dependency.
+- `@react-pdf/renderer`: good for a pure Path A, but it is not real HTML, does not reuse Tailwind and would mean **two surfaces** (preview + PDF) — less natural for editable preview + branding + a possible future AI step.
+- `pdfmake` / `jsPDF`: declarative or lightweight, but a custom DSL / manual layout, weak for long React-style documents.
+- `pdf-lib`: lower-level, better for editing existing PDFs than composing a report layout.
+- WeasyPrint: solid open-source paged-media, but a Python stack misaligned with Next.js.
+- PrinceXML / DocRaptor / PDFMonkey / Gotenberg: strong production "buy" options, but heavier for this MVP and they introduce cost, infra or sending client data to a third party.
+
+**Why HTML-to-PDF with Chromium:** the document is built from the **same `HtmlReport` component** as the live preview, so the preview is the source of truth and a single render serves both screen and PDF (the Playwright → Puppeteer switch for Vercel is explained under *PDF Strategy*).
 
 ## AI Usage
 
-AI assistance was used for implementation support, code review, scoping, and documentation drafting.
+This project was built with an **AI-directed-with-review** workflow: I used **Claude and Codex, alternating between them**, as coding assistants. They read, executed and generated the code, but **I gave the directives on exactly how each part had to be implemented** — what each function had to do, how the data model and flows should be shaped, and which approach to take — and every change was read, run and verified by me before it stayed.
 
-Delegated to AI:
+**Delegated to AI (then reviewed):**
 
-- Initial component and data-layer scaffolding.
-- Iteration on PDF structure.
-- Requirement checklist against the challenge documentation.
-- README drafting.
+- Component and data-layer scaffolding (parser, OCF/PCF normalisation, section model, UI primitives).
+- Iterating on the PDF/HTML report structure and the inline SVG charts.
+- The build/reuse/buy PDF research and a requirement checklist against the challenge documentation.
+- Drafting this README.
 
-Handled directly through implementation and verification:
+**Owned / done or decided by hand (not delegated):**
 
-- Scope selection.
-- Final architecture decisions.
-- CSV field mapping against the provided sample.
-- Manual validation with the sample CSV.
-- Git branch cleanup and delivery hygiene.
+- Scope selection (Path B over A/C) and the final architecture decisions.
+- Domain modelling against the real samples: CSV field mapping, the gate/grave boundary semantics, the "PCF totals are comparative, not additive" rule, and the genericity (de-Relats copy) angle.
+- Reviewing and correcting AI output, manual validation against the sample CSVs, and delivery hygiene (git branches, cleanup).
 
-No uploaded CSV data is sent to an external AI model by the application. Path C is intentionally left for a future iteration where an AI provider could modify the same section model server-side.
+The **application itself does not call any AI provider** and **no uploaded CSV data is sent to an AI model**. Runtime AI (Path C) is intentionally left for a future iteration where a provider could edit the same section model server-side — designed, not implemented.
 
 ## Time Spent
 
-Approximate time invested so far: **one focused MVP build session plus review/polish time**.
+Roughly **50 hours**.
 
-The main time went into:
-
-- Setting up the Next.js UI skeleton.
-- Building the CSV-to-OCF model.
-- Integrating PDF generation.
-- Evolving the PDF architecture towards configurable HTML preview + Chromium export.
-- Checking the provided OCF sample against the generated report.
-- Reviewing the challenge documentation and closing obvious compliance gaps.
+These hours were hands-on driving the work, not passive prompting: the AI assistants read, executed and generated the code, but **I gave the directives on exactly how each part had to be built** — what each function had to do, how the data model and flows should be shaped, and which approach to take — and reviewed/verified every result. The time broke down across the Next.js UI skeleton, the CSV-to-model layer (OCF/PCF), the HTML-preview + Chromium PDF pipeline, the Path B genericity/robustness work (boundary toggle, column mapping, total-row detection, warnings, templates, branding), and the documentation (README).
 
 ## What I Would Do With More Time
 
-1. Add richer Relats-specific brand templates using approved assets.
-2. Add optional structured fields for baseline year, product family, site, material composition and scenario metadata.
-3. Add optional Path C support by integrating an AI provider server-side over the section model.
-4. Improve validation for numeric formats, empty cells and inconsistent totals.
-5. Evaluate PrinceXML or DocRaptor if production-grade pagination becomes the priority.
+1. **Iterate on Path C:** integrate an AI provider server-side over the section model to generate fuller, richer narrative copy — with the user still able to review and edit every generated section.
+2. **Try different technologies in production** to keep scaling the app (alternative PDF engines such as PrinceXML / DocRaptor for production-grade pagination, persistence, etc.) and measure them under real load.
+3. Add richer Relats-specific brand templates using approved assets.
+4. Add optional structured fields for baseline year, product family, site, material composition and scenario metadata.
+5. Improve validation for numeric formats, empty cells and inconsistent totals.
 
 ## Limitations
 
@@ -283,4 +284,4 @@ The main time went into:
 - Runtime AI is not implemented.
 - Numeric parsing is intentionally simple.
 - Emission factors and carbon calculation methodology are out of scope; the app presents already calculated sample data.
-- Consulting details that are not present in the CSV, such as baseline comparisons and recommendations, are handled through editable report sections.
+- Consulting details that are not present in the CSV, such as baseline comparisons and recommendations, are handled through editable report sections.6
